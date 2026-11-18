@@ -29,3 +29,23 @@
 - **Razão (M1–M7):** todas, incluindo média, desvio padrão, coeficiente de variação e razões ("X% mais rápido").
 - **Ordinal (M8):** apenas mediana, moda, percentis e comparações de ordem. Média e razão não fazem sentido.
 - **Nominal (software, comando):** apenas contagens e moda. Servem para agrupar.
+
+## 3.3 Hipóteses
+
+As hipóteses são **bilaterais**, porque não há razão teórica forte para apostar em um sentido. Os dois servidores compartilham a base de código até a versão 7.2.4 e evoluíram de forma independente depois disso. Cada par é testado **em cada uma das 4 condições** (comando × *pipeline*), com nível de significância **α = 0,05** e correção de Holm-Bonferroni para as comparações múltiplas.
+
+| ID | Pergunta | H0 (hipótese nula) | H1 (hipótese alternativa) |
+|---|---|---|---|
+| H-1 | Q1 | A distribuição da vazão (M1) do Valkey é **igual** à do Redis. | A distribuição da vazão do Valkey é **diferente** da do Redis. |
+| H-2 | Q2 | A latência p50 (M2) do Valkey é **igual** à do Redis. | A latência p50 do Valkey é **diferente** da do Redis. |
+| H-3 | Q2 | A latência p99 (M3) do Valkey é **igual** à do Redis. | A latência p99 do Valkey é **diferente** da do Redis. |
+| H-4 | Q3 | O uso de memória (M4) do Valkey é **igual** ao do Redis. | O uso de memória do Valkey é **diferente** do do Redis. |
+| H-5 | Q3 | O uso de CPU (M5) do Valkey é **igual** ao do Redis. | O uso de CPU do Valkey é **diferente** do do Redis. |
+| H-6 | Q4 | A diferença Valkey − Redis em M1 **não depende** do *pipeline* (sem interação). | A diferença Valkey − Redis em M1 **depende** do *pipeline* (há interação). |
+
+Em notação, para H-1 a H-5, sendo θ a mediana (ou a média, se o teste paramétrico for aplicável):
+
+- H0: θ_Valkey = θ_Redis
+- H1: θ_Valkey ≠ θ_Redis
+
+As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma descritiva, para estimar o alcance do resultado.
