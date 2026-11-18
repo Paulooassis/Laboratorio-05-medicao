@@ -49,3 +49,65 @@ Em notação, para H-1 a H-5, sendo θ a mediana (ou a média, se o teste param�
 - H1: θ_Valkey ≠ θ_Redis
 
 As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma descritiva, para estimar o alcance do resultado.
+
+## 3.4 Plano de coleta
+
+### Ferramentas
+
+| Ferramenta | Uso | Versão |
+|---|---|---|
+| Docker / Docker Compose | Isolar servidor e cliente em contêineres | registrar `docker version` na coleta |
+| `redis:8.10.3` | Servidor Redis (imagem oficial) | *digest* registrado no arquivo de metadados |
+| `valkey/valkey:9.1.3` | Servidor Valkey (imagem oficial) | *digest* registrado no arquivo de metadados |
+| `redislabs/memtier_benchmark` | Gerador de carga, **o mesmo para os dois servidores** | tag fixada na coleta |
+| `docker stats` + `INFO memory` | Uso de CPU e memória | — |
+| Python 3 (`scripts/`) | Orquestrar as execuções, sortear a ordem e salvar CSV/JSON | 3.13 |
+
+### Desenho e amostra
+
+- **Desenho:** fatorial completo 2 (software) × 2 (comando) × 2 (*pipeline*) = **8 tratamentos**.
+- **Repetições:** **30 execuções independentes por tratamento**, totalizando **240 execuções** de 30 s cada (≈ 2 h 40 min com reinícios).
+- **Unidade experimental:** uma execução completa (contêiner novo → carga → coleta das métricas → contêiner removido).
+- **Aleatorização:** a ordem das 240 execuções é sorteada com semente fixa (registrada), para que efeitos de temperatura, *throttling* ou processos de fundo não se concentrem em um só software.
+- **Aquecimento:** 1 execução de aquecimento por tratamento, descartada.
+
+### Procedimento de cada execução
+
+1. Subir o contêiner do servidor com CPUs fixadas (`--cpuset-cpus=0-1`) e configuração padrão.
+2. Popular 100.000 chaves com valores de 256 bytes (necessário para o `GET`).
+3. Rodar a carga no contêiner do cliente, em outras CPUs (`--cpuset-cpus=2-5`):
+   ```
+   memtier_benchmark -s <servidor> -p 6379 -t 4 -c 50 --test-time=30 \
+     --data-size=256 --key-maximum=100000 --key-pattern=R:R \
+     --ratio=<1:0 para SET | 0:1 para GET> --pipeline=<1|16> \
+     --hide-histogram --json-out-file=<arquivo>.json
+   ```
+4. Durante a carga, amostrar `docker stats` a cada 1 s (M5). Ao final, ler `INFO memory` (M4).
+5. Salvar o JSON bruto em `data/raw/` e uma linha consolidada em `data/processed/execucoes.csv`.
+6. Remover os contêineres antes da próxima execução.
+
+### Controle do ambiente
+
+- Mesma máquina para todas as execuções, ligada na tomada, com perfil de energia "alto desempenho" e aplicativos fechados.
+- Registrar no arquivo de metadados: CPU, RAM, sistema operacional, versão do Docker/WSL2, *digests* das imagens e semente.
+
+### Coleta piloto (Sprint 1)
+
+- **5 execuções por tratamento (40 no total).** Servem para validar o roteiro, estimar a variância de cada métrica e conferir com simulação de poder (reaproveitando o Lab04) se n = 30 basta para detectar diferenças de 5% na vazão.
+
+### Evidências de impacto
+
+- Coletadas pelo script `scripts/coleta_impacto.py` (tarefa 4), uma vez no início e outra no fim do estudo.
+
+### Regras de ética
+
+- **Nenhum teste de carga em sistema de terceiros.** Toda a carga é gerada e recebida **dentro da máquina do grupo**.
+- Consultas a serviços públicos (Docker Hub, PyPI, npm, DB-Engines etc.) feitas **por script com no máximo 1 requisição por segundo**, em endpoints públicos, respeitando os termos de uso e o `robots.txt`.
+- **Nenhum dado pessoal** é coletado. Os dados do experimento são sintéticos (chaves e valores gerados).
+- O estudo não envolve participantes humanos.
+
+### Validação e versionamento dos dados
+
+- Execução **inválida** (e repetida) se: o `memtier_benchmark` reportar erros de conexão, a vazão for 0 ou o contêiner reiniciar durante a carga.
+- *Outliers* **não** são removidos automaticamente. São sinalizados (fora de Q1 − 1,5·IQR / Q3 + 1,5·IQR) e discutidos.
+- Dados brutos e processados versionados no repositório (`data/raw/`, `data/processed/`), junto com os metadados de cada coleta.
