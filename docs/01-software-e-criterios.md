@@ -44,7 +44,7 @@ Todos os números abaixo foram consultados em **17/11/2026** nas fontes indicada
 | *Pulls* da imagem oficial no Docker Hub | **11,70 bilhões** | **410,9 milhões** | https://hub.docker.com/v2/repositories/library/redis/ · https://hub.docker.com/v2/repositories/valkey/valkey/ |
 | Posição no DB-Engines (geral) | **8º** | 87º | https://db-engines.com/en/system/Redis · https://db-engines.com/en/system/Valkey |
 | Posição no DB-Engines (*key-value stores*) | **1º** | 12º | idem |
-| Downloads do cliente Python no último mês (PyPI) | 242,1 milhões (`redis`) | ver `data/impacto/` (`valkey`) | https://pypistats.org/api/packages/redis/recent |
+| Downloads do cliente Python no último mês (PyPI) | 242,1 milhões (`redis`) | 6,4 milhões (`valkey`) | https://pypistats.org/api/packages/redis/recent · https://pypistats.org/api/packages/valkey/recent |
 | Downloads de clientes Node.js no último mês (npm) | 81,2 mi (`redis`) + 165,9 mi (`ioredis`) | 3,8 mi (`iovalkey`) + 2,7 mi (`@valkey/valkey-glide`) | https://api.npmjs.org/downloads/point/last-month/ |
 | Instalações via Homebrew nos últimos 365 dias | 346.085 | 13.839 | https://formulae.brew.sh/api/formula/redis.json · https://formulae.brew.sh/api/formula/valkey.json |
 
