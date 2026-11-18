@@ -48,3 +48,41 @@ A definição completa de cada métrica (entidade, atributo, tipo de medida e es
 
 - **Lei de Goodhart / Campbell:** os dois projetos publicam *benchmarks* próprios e têm incentivo para otimizar exatamente o que o `redis-benchmark` mede. Por isso o estudo usa uma ferramenta de carga **neutra e igual para os dois** (`memtier_benchmark`) e reporta latência de cauda (p99), não só a média.
 - **Falácia de McNamara:** vazão e latência não capturam tudo o que pesa na escolha (licença, suporte, ecossistema). O estudo **não** conclui "qual é melhor"; conclui apenas sobre a eficiência de desempenho medida.
+
+## 2.3 Caminho do estudo
+
+**Caminho principal: Rodar o software no ambiente do grupo.** Os dois servidores são executados a partir das **mesmas imagens oficiais usadas em produção**, na mesma máquina, com a mesma configuração e a mesma carga. Só a variável "software" muda entre os tratamentos.
+
+**Caminho complementar: Avaliar a qualidade do produto (ISO/IEC 25010).** As métricas escolhidas operacionalizam a característica *eficiência de desempenho* da norma (subcaracterísticas *comportamento no tempo* e *utilização de recursos*).
+
+**Por que este caminho e não os outros:**
+
+| Alternativa | Por que não foi o principal |
+|---|---|
+| Medir o serviço de fora | Não existe um "serviço Redis público" para observar. Além disso, teste de carga em sistema de terceiros é proibido pelo enunciado. |
+| Analisar dados de operação | Não há dados públicos comparáveis de desempenho Redis × Valkey em produção. Os *benchmarks* publicados vêm dos próprios fornecedores, o que gera conflito de interesse. |
+| Estudar com pessoas / survey | A pergunta é sobre o comportamento do software, não sobre a percepção de usuários. |
+| **Rodar no ambiente do grupo** | **Permite controlar as variáveis, repetir as medições muitas vezes e aplicar carga sem afetar ninguém**, o que é o que um teste de hipótese sobre desempenho exige. |
+
+Os números de impacto (M6–M8) vêm de fontes públicas e são coletados por script (tarefa 4), servindo para traduzir o resultado para o mundo real (seção 5 do enunciado).
+
+## 2.4 Classificação nas 7 categorias de pesquisa (v1)
+
+| Categoria | Classificação | Justificativa |
+|---|---|---|
+| **Natureza** | Aplicada | O objetivo é gerar conhecimento para uma decisão prática (manter Redis ou migrar para Valkey), não desenvolver teoria nova. |
+| **Objetivos** | Explicativa | O estudo busca estabelecer se a troca do software (causa) **provoca** diferença no desempenho (efeito), indo além de descrever os números. |
+| **Abordagem** | Quantitativa | Todas as métricas são numéricas (ops/s, ms, MiB, %) e a análise usa estatística descritiva e testes de hipótese. |
+| **Procedimentos** | Experimental (experimento controlado), com apoio documental | O grupo manipula a variável independente (software) e controla as demais (máquina, versão, configuração, carga). Os dados de impacto vêm de pesquisa documental em fontes públicas. |
+| **Tempo** | Transversal | As medições são feitas em uma janela curta, com as versões vigentes em novembro de 2026. Não se acompanha a evolução das versões ao longo do tempo. |
+| **Controle** | Laboratório (*in vitro*) | O ambiente é totalmente controlado pelo grupo: contêineres isolados, CPUs fixadas, carga sintética. Isso aumenta a validade interna e reduz a externa (não é tráfego real de produção). |
+| **Nível de evidência** | Alto para causalidade no contexto testado, limitado para generalização | Um experimento controlado com repetições e aleatorização é o desenho mais forte para inferir causa. A evidência vale para *esta* máquina, *estas* versões e *esta* carga, e não substitui medição em produção. |
+
+> Versão 1 (Sprint 1). A classificação será revisada na Sprint 3, depois da coleta completa.
+
+## 2.5 Checklist de entrega
+
+- [x] Pergunta de pesquisa escrita (2.1)
+- [x] GQM completo: objetivo no template de Basili, perguntas e métricas (2.2)
+- [x] Caminho do estudo escolhido e justificado (2.3)
+- [x] 7 categorias classificadas, cada uma com justificativa, v1 (2.4)
