@@ -1,0 +1,37 @@
+data_coleta,software,criterio,fonte,metrica,valor,unidade,url,observacao
+2026-11-17T22:22:41-03:00,Redis,alto_impacto,Docker Hub,pulls_total,11701981073,pulls,https://hub.docker.com/v2/repositories/library/redis/,imagem library/redis
+2026-11-17T22:22:41-03:00,Redis,alto_impacto,Docker Hub,estrelas_docker_hub,13635,estrelas,https://hub.docker.com/v2/repositories/library/redis/,imagem library/redis
+2026-11-17T22:22:41-03:00,Redis,em_operacao,Docker Hub,imagem_ultima_atualizacao,2026-11-16T00:05:21.728634Z,data ISO 8601,https://hub.docker.com/v2/repositories/library/redis/,imagem library/redis
+2026-11-17T22:22:41-03:00,Redis,real,GitHub API,estrelas_github,77687,estrelas,https://api.github.com/repos/redis/redis,apenas evidencia de adocao; o repositorio nao e objeto de pesquisa
+2026-11-17T22:22:41-03:00,Redis,real,GitHub API,forks_github,25126,forks,https://api.github.com/repos/redis/redis,
+2026-11-17T22:22:41-03:00,Redis,em_operacao,GitHub API,ultimo_release_versao,8.10.3,versao,https://api.github.com/repos/redis/redis/releases/latest,
+2026-11-17T22:22:41-03:00,Redis,em_operacao,GitHub API,ultimo_release_data,2026-10-26T11:56:24Z,data ISO 8601,https://api.github.com/repos/redis/redis/releases/latest,
+2026-11-17T22:22:41-03:00,Redis,alto_impacto,PyPI Stats,downloads_cliente_python_ultimo_mes,242121925,downloads/mes,https://pypistats.org/api/packages/redis/recent,cliente oficial em Python: pacote 'redis'
+2026-11-17T22:22:41-03:00,Redis,alto_impacto,npm,downloads_npm_ultimo_mes[redis],81207774,downloads/mes,https://api.npmjs.org/downloads/point/last-month/redis,"cliente Node.js 'redis', periodo 2026-10-18 a 2026-11-16"
+2026-11-17T22:22:41-03:00,Redis,alto_impacto,npm,downloads_npm_ultimo_mes[ioredis],165876953,downloads/mes,https://api.npmjs.org/downloads/point/last-month/ioredis,"cliente Node.js 'ioredis', periodo 2026-10-18 a 2026-11-16"
+2026-11-17T22:22:41-03:00,Redis,em_operacao,Homebrew,versao_estavel_homebrew,8.10.3,versao,https://formulae.brew.sh/api/formula/redis.json,
+2026-11-17T22:22:41-03:00,Redis,alto_impacto,Homebrew,instalacoes_homebrew_30d,23399,instalacoes,https://formulae.brew.sh/api/formula/redis.json,apenas macOS/Linux via Homebrew (subestima o total)
+2026-11-17T22:22:41-03:00,Redis,alto_impacto,Homebrew,instalacoes_homebrew_365d,345662,instalacoes,https://formulae.brew.sh/api/formula/redis.json,apenas macOS/Linux via Homebrew (subestima o total)
+2026-11-17T22:22:41-03:00,Redis,em_operacao,endoflife.date,versoes_mantidas,8.10;8.8;8.6;8.4;8.2;8.0;7.4;7.2;6.2,ciclos de versao,https://endoflife.date/api/redis.json,ciclos sem data de fim de suporte vencida na data da coleta
+2026-11-17T22:22:41-03:00,Redis,em_operacao,endoflife.date,versao_mais_recente,8.10.3,versao,https://endoflife.date/api/redis.json,
+2026-11-17T22:22:41-03:00,Redis,em_operacao,endoflife.date,versao_mais_recente_data,2026-10-26,data,https://endoflife.date/api/redis.json,
+2026-11-17T22:22:41-03:00,Redis,alto_impacto,DB-Engines,posicao_ranking[Overall],8,posicao (ordinal),https://db-engines.com/en/system/Redis,"ranking de popularidade, atualizado mensalmente"
+2026-11-17T22:22:41-03:00,Redis,alto_impacto,DB-Engines,posicao_ranking[Key-value stores],1,posicao (ordinal),https://db-engines.com/en/system/Redis,"ranking de popularidade, atualizado mensalmente"
+2026-11-17T22:22:41-03:00,Valkey,alto_impacto,Docker Hub,pulls_total,410901075,pulls,https://hub.docker.com/v2/repositories/valkey/valkey/,imagem valkey/valkey
+2026-11-17T22:22:41-03:00,Valkey,alto_impacto,Docker Hub,estrelas_docker_hub,139,estrelas,https://hub.docker.com/v2/repositories/valkey/valkey/,imagem valkey/valkey
+2026-11-17T22:22:41-03:00,Valkey,em_operacao,Docker Hub,imagem_ultima_atualizacao,2026-11-17T02:08:40.027042Z,data ISO 8601,https://hub.docker.com/v2/repositories/valkey/valkey/,imagem valkey/valkey
+2026-11-17T22:22:41-03:00,Valkey,real,GitHub API,estrelas_github,27735,estrelas,https://api.github.com/repos/valkey-io/valkey,apenas evidencia de adocao; o repositorio nao e objeto de pesquisa
+2026-11-17T22:22:41-03:00,Valkey,real,GitHub API,forks_github,1540,forks,https://api.github.com/repos/valkey-io/valkey,
+2026-11-17T22:22:41-03:00,Valkey,em_operacao,GitHub API,ultimo_release_versao,9.1.3,versao,https://api.github.com/repos/valkey-io/valkey/releases/latest,
+2026-11-17T22:22:41-03:00,Valkey,em_operacao,GitHub API,ultimo_release_data,2026-10-26T23:21:45Z,data ISO 8601,https://api.github.com/repos/valkey-io/valkey/releases/latest,
+2026-11-17T22:22:41-03:00,Valkey,alto_impacto,PyPI Stats,downloads_cliente_python_ultimo_mes,6415109,downloads/mes,https://pypistats.org/api/packages/valkey/recent,cliente oficial em Python: pacote 'valkey'
+2026-11-17T22:22:41-03:00,Valkey,alto_impacto,npm,downloads_npm_ultimo_mes[iovalkey],3844568,downloads/mes,https://api.npmjs.org/downloads/point/last-month/iovalkey,"cliente Node.js 'iovalkey', periodo 2026-10-18 a 2026-11-16"
+2026-11-17T22:22:41-03:00,Valkey,alto_impacto,npm,downloads_npm_ultimo_mes[@valkey/valkey-glide],2696578,downloads/mes,https://api.npmjs.org/downloads/point/last-month/@valkey/valkey-glide,"cliente Node.js '@valkey/valkey-glide', periodo 2026-10-18 a 2026-11-16"
+2026-11-17T22:22:41-03:00,Valkey,em_operacao,Homebrew,versao_estavel_homebrew,9.1.3,versao,https://formulae.brew.sh/api/formula/valkey.json,
+2026-11-17T22:22:41-03:00,Valkey,alto_impacto,Homebrew,instalacoes_homebrew_30d,1941,instalacoes,https://formulae.brew.sh/api/formula/valkey.json,apenas macOS/Linux via Homebrew (subestima o total)
+2026-11-17T22:22:41-03:00,Valkey,alto_impacto,Homebrew,instalacoes_homebrew_365d,13870,instalacoes,https://formulae.brew.sh/api/formula/valkey.json,apenas macOS/Linux via Homebrew (subestima o total)
+2026-11-17T22:22:41-03:00,Valkey,em_operacao,endoflife.date,versoes_mantidas,9.1;9.0;8.1;8.0;7.2,ciclos de versao,https://endoflife.date/api/valkey.json,ciclos sem data de fim de suporte vencida na data da coleta
+2026-11-17T22:22:41-03:00,Valkey,em_operacao,endoflife.date,versao_mais_recente,9.1.3,versao,https://endoflife.date/api/valkey.json,
+2026-11-17T22:22:41-03:00,Valkey,em_operacao,endoflife.date,versao_mais_recente_data,2026-10-26,data,https://endoflife.date/api/valkey.json,
+2026-11-17T22:22:41-03:00,Valkey,alto_impacto,DB-Engines,posicao_ranking[Overall],87,posicao (ordinal),https://db-engines.com/en/system/Valkey,"ranking de popularidade, atualizado mensalmente"
+2026-11-17T22:22:41-03:00,Valkey,alto_impacto,DB-Engines,posicao_ranking[Key-value stores],12,posicao (ordinal),https://db-engines.com/en/system/Valkey,"ranking de popularidade, atualizado mensalmente"
