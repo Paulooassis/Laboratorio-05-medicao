@@ -51,3 +51,18 @@ Todos os números abaixo foram consultados em **17/11/2026** nas fontes indicada
 **Leitura.** O Redis é o banco chave-valor mais popular do mundo (1º no DB-Engines na categoria) e sua imagem oficial passa de 11 bilhões de *pulls*. O Valkey é mais novo (2024), mas já soma mais de 400 milhões de *pulls* e é oferecido por grandes provedores de nuvem. Como os dois falam o mesmo protocolo, **qualquer diferença de desempenho entre eles afeta diretamente a base instalada do Redis que está avaliando a migração**.
 
 > Observação sobre escalas: *pulls* e downloads são contagens (escala de razão); a posição no DB-Engines é **ordinal** e só permite comparações de ordem (não faz sentido dizer que o Redis é "10 vezes mais popular" por estar em 8º contra 87º).
+
+## 1.3 O objeto de pesquisa não é um repositório do GitHub
+
+O enunciado não aceita repositórios públicos do GitHub como objeto de pesquisa (mineração de commits, issues, PRs ou análise de código-fonte). Este estudo respeita essa regra:
+
+- **Objeto de pesquisa:** o **servidor Redis e o servidor Valkey em execução**, nas mesmas versões distribuídas pelas imagens oficiais que as empresas usam em produção, rodando no ambiente do grupo (caminho "Rodar o software no ambiente do grupo").
+- **O que é medido:** o comportamento do software em operação (vazão, latência, uso de memória e CPU) sob cargas controladas.
+- **O que não é feito:** nenhum commit, issue, *pull request* ou arquivo de código-fonte é minerado ou analisado.
+- **Uso da API do GitHub:** apenas para ler o número de estrelas e a data do último *release*, como **evidência de adoção e manutenção** (critérios "real" e "em operação"), o que é o uso sugerido pelo próprio enunciado na tarefa do script de coleta.
+
+## 1.4 Checklist de entrega
+
+- [ ] Software confirmado com o professor (nenhum outro grupo escolheu Redis × Valkey). Registrar aqui a data e a forma da confirmação: `<preencher>`
+- [x] Links e números de cada critério, com fonte e data de acesso (seção 1.2)
+- [x] Confirmado que o objeto de pesquisa não é um repositório do GitHub (seção 1.3)
