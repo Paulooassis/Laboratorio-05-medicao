@@ -60,9 +60,3 @@ O enunciado não aceita repositórios públicos do GitHub como objeto de pesquis
 - **O que é medido:** o comportamento do software em operação (vazão, latência, uso de memória e CPU) sob cargas controladas.
 - **O que não é feito:** nenhum commit, issue, *pull request* ou arquivo de código-fonte é minerado ou analisado.
 - **Uso da API do GitHub:** apenas para ler o número de estrelas e a data do último *release*, como **evidência de adoção e manutenção** (critérios "real" e "em operação"), o que é o uso sugerido pelo próprio enunciado na tarefa do script de coleta.
-
-## 1.4 Checklist de entrega
-
-- [ ] Software confirmado com o professor (nenhum outro grupo escolheu Redis × Valkey). Registrar aqui a data e a forma da confirmação: `<preencher>`
-- [x] Links e números de cada critério, com fonte e data de acesso (seção 1.2)
-- [x] Confirmado que o objeto de pesquisa não é um repositório do GitHub (seção 1.3)
