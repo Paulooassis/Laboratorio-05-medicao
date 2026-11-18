@@ -111,3 +111,59 @@ As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma
 - Execução **inválida** (e repetida) se: o `memtier_benchmark` reportar erros de conexão, a vazão for 0 ou o contêiner reiniciar durante a carga.
 - *Outliers* **não** são removidos automaticamente. São sinalizados (fora de Q1 − 1,5·IQR / Q3 + 1,5·IQR) e discutidos.
 - Dados brutos e processados versionados no repositório (`data/raw/`, `data/processed/`), junto com os metadados de cada coleta.
+
+## 3.5 Plano de análise
+
+### Estatística descritiva (por tratamento)
+
+- n, média, **mediana**, desvio padrão, coeficiente de variação, mínimo, máximo, Q1, Q3 e IQR.
+- Intervalo de confiança de 95% da mediana por *bootstrap* (10.000 reamostragens).
+- Gráficos: *boxplot* por software em cada condição (M1–M5), ECDF das latências e gráfico de interação software × *pipeline* para H-6.
+- M6–M8 (impacto): apenas tabela descritiva. M8 é ordinal, então reporta-se só a posição, sem médias.
+
+### Escolha do teste de hipótese (H-1 a H-5)
+
+As amostras são **independentes** (cada execução usa um contêiner novo) e há **dois grupos** (Redis × Valkey) em cada condição:
+
+```
+Shapiro-Wilk em cada grupo (α = 0,05) + inspeção do Q-Q plot
+├── os dois grupos normais   → teste t de Welch (não assume variâncias iguais)
+└── algum grupo não normal   → Mann-Whitney U (bilateral)
+```
+
+Como métricas de desempenho costumam ser assimétricas e ter cauda longa, **o teste esperado é o Mann-Whitney U**. O t de Welch só entra se a normalidade for confirmada.
+
+### Interação (H-6)
+
+- ANOVA fatorial 2 × 2 (software × *pipeline*) para cada comando, se os resíduos forem normais.
+- Caso contrário, **ANOVA com *Aligned Rank Transform* (ART)**, a alternativa não paramétrica que permite testar a interação.
+
+### Tamanho do efeito
+
+| Teste usado | Tamanho do efeito | Interpretação |
+|---|---|---|
+| Mann-Whitney U | **δ de Cliff** | \|δ\| < 0,147 desprezível · < 0,33 pequeno · < 0,474 médio · ≥ 0,474 grande (Romano et al., 2006) |
+| t de Welch | **g de Hedges** | < 0,2 desprezível · < 0,5 pequeno · < 0,8 médio · ≥ 0,8 grande (Cohen) |
+| ANOVA / ART | η² parcial | 0,01 pequeno · 0,06 médio · 0,14 grande |
+
+Além do tamanho do efeito padronizado, reporta-se a **diferença percentual entre as medianas** com IC de 95% (*bootstrap*), porque é o número que faz sentido para quem opera o serviço ("o Valkey teve X% mais vazão").
+
+### Comparações múltiplas e relevância prática
+
+- São 5 hipóteses × 4 condições = 20 testes. O p-valor é ajustado por **Holm-Bonferroni**.
+- **Relevância prática:** uma diferença menor que **5%** na mediana é tratada como irrelevante na prática, mesmo que seja estatisticamente significativa.
+
+### Poder e erro tipo I (reaproveitado do Lab04)
+
+- Com a variância estimada no piloto, simula-se (≥ 1.000 réplicas) o erro tipo I e o poder do Mann-Whitney para n = 30 e efeito de 5%. Se o poder ficar abaixo de 0,8, o n é aumentado antes da coleta completa.
+
+### Ferramentas
+
+- Python: `pandas`, `scipy.stats` (Shapiro, Levene, Welch, Mann-Whitney), `numpy` (*bootstrap*), `matplotlib`/`seaborn`. O *dashboard* do Lab04 é reaproveitado para a visualização.
+
+## 3.6 Checklist de entrega
+
+- [x] Métricas com entidade, atributo, tipo de medida e escala (3.2)
+- [x] Hipóteses H0 e H1 escritas (3.3)
+- [x] Plano de coleta com ferramentas, frequência, amostra e regras de ética (3.4)
+- [x] Plano de análise com a estatística descritiva, o teste escolhido e o tamanho do efeito (3.5)
