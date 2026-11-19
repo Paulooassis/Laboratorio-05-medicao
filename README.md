@@ -89,8 +89,9 @@ Rodada em 19/11/2026: 8 tratamentos × 5 repetições = **40 execuções válida
 | Vazão e latência (M1–M3) | Diferenças de 0 a 5%, dentro do ruído do piloto (CV de 8 a 23%) |
 | CPU (M5) | Os dois servidores ficam saturados (~101%), então a métrica não discrimina (efeito teto) |
 | Poder (simulação) | Erro tipo I calibrado (≈ 0,05). Com a variância do piloto, n = 30 **não basta** para detectar 5% em vazão e latência |
+| Deriva temporal | 3 execuções seguidas (todas Redis) com vazão 15–23% abaixo da mediana; sem elas, a vantagem do Redis em vazão e latência p50 cresce até 1,5 p.p. A memória não muda |
 
-**Ajustes para a S02:** coletar na tomada com governador `performance` (o piloto rodou na bateria, em `powersave`), refazer a simulação de poder com um mini-piloto e redefinir o n; tratar o efeito teto da CPU com uma condição de carga fixa ou a métrica "CPU por 100 mil ops".
+**Ajustes para a S02:** coletar na tomada com governador `performance` (o piloto rodou na bateria, em `powersave`), refazer a simulação de poder com um mini-piloto (sem deriva no `diagnostico_ordem.py`) e redefinir o n; tratar o efeito teto da CPU com uma condição de carga fixa ou a métrica "CPU por 100 mil ops".
 
 Dados: [data/raw/piloto/](data/raw/piloto/) e [data/processed/](data/processed/) · Tabelas e gráficos: [results/piloto/](results/piloto/)
 
@@ -124,6 +125,7 @@ python3 scripts/coleta_experimento.py --coleta piloto --repeticoes 5 # execuçõ
 python3 scripts/validacao_dados.py   --coleta piloto                 # validação
 python3 scripts/analise.py           --coleta piloto                 # descritiva, gráficos, testes
 python3 scripts/simulacao_poder.py   --coleta piloto                 # poder e erro tipo I
+python3 scripts/diagnostico_ordem.py --coleta piloto                 # deriva ao longo da coleta
 ```
 
 No Windows, troque `python3` por `py`. Ajuste `--cpus-servidor` e `--cpus-cliente` à topologia da sua máquina (`lscpu -e` no Linux). Detalhes de cada script, opções e saídas: [scripts/README.md](scripts/README.md).

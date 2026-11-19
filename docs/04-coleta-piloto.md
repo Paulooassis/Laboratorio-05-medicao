@@ -75,18 +75,30 @@ Reaproveitando o Lab04, o Mann-Whitney foi simulado 2.000 vezes por cenário, co
 
 **Conclusão:** com a variabilidade do piloto, **n = 30 não basta** para detectar 5% em vazão e latência. Ou se reduz a variabilidade, ou se aumenta o n (ver ajustes A1 e A4).
 
-## 4.5 Problemas encontrados e ajustes no plano
+## 4.5 Diagnóstico de deriva temporal ([results/piloto/ordem.md](../results/piloto/ordem.md))
+
+O `scripts/diagnostico_ordem.py` mede o desvio de cada execução em relação à mediana do seu tratamento e o coloca contra a ordem de execução. Isso deixa as 8 condições na mesma escala e mostra se a máquina mudou de comportamento durante a coleta. Nada é removido da análise principal: é um diagnóstico para o problema P1 e para as ameaças à validade.
+
+![Desvio × ordem de execução](../results/piloto/ordem_desvios.png)
+
+- **Episódio confirmado (ordem 17–19, 17:28–17:29 UTC).** São as únicas execuções com vazão 10% ou mais abaixo da mediana do tratamento (−15% a −23%), com latência p50 17% a 28% maior ao mesmo tempo. Memória e CPU quase não mudam (< 1%), o que aponta para perda de desempenho da máquina (frequência da CPU), e não para um problema do servidor. As três são do Redis, por acaso do sorteio.
+- **Segundo efeito, mais fraco, no fim da coleta.** As três últimas execuções do Valkey (ordem 46–48, 17:44–17:45 UTC) ficaram 4% a 8% abaixo da mediana em vazão, com latência maior. Isso aparece como tendência de queda do Valkey ao longo da coleta (Spearman ρ = −0,58 entre ordem e desvio da vazão, p = 0,008; latência p50: ρ = +0,49). O Redis não mostra tendência (ρ = +0,33, p = 0,15). É compatível com a bateria descarregando, mas com n = 20 e 15 correlações sem ajuste, é um indício, não uma conclusão.
+- **Sensibilidade.** Sem as execuções 17–19, a vantagem do Redis em vazão e latência p50 **aumenta** 0,3 a 1,5 p.p. (por exemplo, vazão `GET` p=16: −4,0% → −5,3%; p50 `GET` p=16: +3,6% → +5,1%), porque a interferência caiu justamente sobre o Redis. A memória não muda (−20% nos dois casos).
+
+**Leitura:** a aleatorização funcionou como esperado (a interferência não se concentrou num tratamento de forma sistemática), mas com n = 5 três execuções ruins bastam para mover a diferença em vazão e latência para perto do limiar de 5%. Isso reforça o ajuste A1. No mini-piloto da S02, o critério de aceite passa a incluir: **nenhuma execução sinalizada pelo `diagnostico_ordem.py` e nenhuma tendência com |ρ| > 0,3 em M1–M3**.
+
+## 4.6 Problemas encontrados e ajustes no plano
 
 | # | Problema observado no piloto | Ajuste para a coleta completa (S02) |
 |---|---|---|
-| P1 | **Ambiente ruidoso.** A coleta rodou com o notebook **na bateria** e com o governador de CPU em `powersave`, contrariando o plano ("na tomada, alto desempenho"). As execuções 17, 18 e 19 (17:28–17:30 UTC, todas Redis por acaso do sorteio) tiveram vazão ~15% menor e latência maior ao mesmo tempo, sinal de interferência passageira (frequência da CPU ou processo em segundo plano). Isso inflou o CV para 8 a 23%. | **A1.** Coletar **na tomada**, com governador `performance` (`sudo cpupower frequency-set -g performance` ou `powerprofilesctl set performance`), aplicativos fechados e sem usar a máquina durante a coleta. O script passou a gravar nos metadados se a máquina está na tomada e o perfil de energia. Antes da coleta completa, rodar um **mini-piloto** (`--repeticoes 3`) para confirmar que o CV caiu. |
+| P1 | **Ambiente ruidoso.** A coleta rodou com o notebook **na bateria** e com o governador de CPU em `powersave`, contrariando o plano ("na tomada, alto desempenho"). As execuções 17, 18 e 19 (17:28–17:30 UTC, todas Redis por acaso do sorteio) tiveram vazão ~15% menor e latência maior ao mesmo tempo, sinal de interferência passageira (frequência da CPU ou processo em segundo plano). Isso inflou o CV para 8 a 23%. | **A1.** Coletar **na tomada**, com governador `performance` (`sudo cpupower frequency-set -g performance` ou `powerprofilesctl set performance`), aplicativos fechados e sem usar a máquina durante a coleta. O script passou a gravar nos metadados se a máquina está na tomada e o perfil de energia. Antes da coleta completa, rodar um **mini-piloto** (`--repeticoes 3`) para confirmar que o CV caiu e que o `diagnostico_ordem.py` não sinaliza deriva (seção 4.5). |
 | P2 | O *pinning* do plano (servidor `0-1`, cliente `2-5`) colocava cliente e servidor no **mesmo núcleo físico** (as CPUs 1 e 5 são o mesmo núcleo nesta máquina). | **A2.** Servidor em `0,4` e cliente em `1-3,5-7` (já aplicado no piloto e no plano). Parâmetros configuráveis por linha de comando para outras máquinas. |
 | P3 | **M5 tem efeito teto.** Com 200 conexões, os dois servidores ficam saturados (~101% de um núcleo, CV 0,2%). A métrica mostra que o servidor está no limite, não quanto CPU ele gasta por trabalho feito (problema de **validade de construto**). | **A3.** Complementar M5 com uma condição de **carga fixa** abaixo da saturação (`memtier --rate-limiting`), em que a CPU vira comparável, ou trocar M5 pela métrica derivada **CPU por 100 mil operações** (`cpu_medio_pct / ops_s × 10⁵`). A escolha fica para a S02. |
 | P4 | **Poder insuficiente com n = 30** para 5% em vazão e latência (seção 4.4). | **A4.** Depois do A1, rodar de novo `simulacao_poder.py` com o CV do mini-piloto. Se o poder continuar < 0,8, aumentar o n (o script aceita `--repeticoes`) ou restringir a família de testes do Holm às hipóteses principais (H-1 a H-3). |
 | P5 | A leitura de CPU do `docker stats` repetia cada valor (atualiza a cada 0,5 s) e incluía segundos antes de a carga começar. | **A5.** Já corrigido: leituras com ≥ 0,75 s de distância, dentro da janela `Start time`–`Finish time` do memtier, descartando os 2 s iniciais. |
 | P6 | Com n = 5 o Shapiro-Wilk quase nunca rejeita a normalidade, então o t de Welch foi escolhido na maioria dos casos. | **A6.** Manter o fluxo de decisão do plano. Com n = 30, conferir também o Q-Q plot antes de escolher o teste. |
 
-## 4.6 O que o piloto já indica (a confirmar na S02)
+## 4.7 O que o piloto já indica (a confirmar na S02)
 
 - **Memória:** o Valkey 9.1 ocupou cerca de **20% menos memória residente** que o Redis 8.10 com a mesma base (100 mil chaves de 256 bytes). O efeito é grande e estável, e é o candidato mais forte a resultado da S02.
 - **Vazão e latência:** diferenças de 0 a 5%, quase todas a favor do Redis, mas dentro do ruído do piloto. Ainda não dá para afirmar nada.
