@@ -1,0 +1,7 @@
+# Bibliotecas da validacao, da analise e da simulacao de poder (Python 3.10+).
+# Os scripts de coleta (coleta_impacto.py e coleta_experimento.py) usam so a
+# biblioteca padrao.
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+matplotlib==3.10.9

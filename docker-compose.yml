@@ -1,0 +1,45 @@
+# Ambiente do experimento Redis x Valkey (LAB05)
+#
+# Sobe os dois servidores, nas mesmas imagens oficiais e versoes do estudo,
+# para exploracao manual:
+#
+#   docker compose up -d          # ou: docker-compose up -d
+#   docker compose run --rm memtier -s redis  --test-time=10 --hide-histogram
+#   docker compose run --rm memtier -s valkey --test-time=10 --hide-histogram
+#   docker compose down
+#
+# A coleta oficial NAO usa estes conteineres: scripts/coleta_experimento.py cria
+# um conteiner novo por execucao (unidade experimental independente), com as
+# mesmas imagens, rede e fixacao de CPUs definidas aqui.
+#
+# CPUs: na maquina de coleta (4 nucleos / 8 threads), as CPUs 0 e 4 sao o mesmo
+# nucleo fisico. O servidor fica no nucleo 0 e o gerador de carga nos nucleos 1-3,
+# para os dois nao disputarem o mesmo nucleo. Ajuste se a sua topologia for outra
+# (veja `lscpu -e`).
+
+version: "3.8"
+
+services:
+  redis:
+    image: redis:8.10.3
+    cpuset: "0,4"
+    ports:
+      - "6379:6379"
+    networks: [lab05]
+
+  valkey:
+    image: valkey/valkey:9.1.3
+    cpuset: "0,4"
+    ports:
+      - "6380:6379"
+    networks: [lab05]
+
+  memtier:
+    image: redislabs/memtier_benchmark:2.6.1
+    profiles: ["carga"]
+    cpuset: "1-3,5-7"
+    networks: [lab05]
+
+networks:
+  lab05:
+    name: lab05-net
