@@ -7,6 +7,7 @@
 | [`validacao_dados.py`](#validacao_dadospy-validação-dos-dados) | Valida os dados coletados (nulos, duplicados, fora do esperado) | `requirements.txt` |
 | [`analise.py`](#analisepy-análise) | Estatística descritiva, gráficos e testes de hipótese | `requirements.txt` |
 | [`simulacao_poder.py`](#simulacao_poderpy-poder-e-erro-tipo-i) | Simula erro tipo I e poder com a variância do piloto | `requirements.txt` |
+| [`diagnostico_ordem.py`](#diagnostico_ordempy-deriva-temporal) | Verifica se o desempenho mudou ao longo da coleta (deriva, episódios de interferência) | `requirements.txt` |
 
 Fluxo completo (Linux/macOS; no Windows troque `python3` por `py`):
 
@@ -16,6 +17,7 @@ python3 scripts/coleta_experimento.py --coleta piloto --repeticoes 5   # ~32 min
 python3 scripts/validacao_dados.py   --coleta piloto
 python3 scripts/analise.py           --coleta piloto
 python3 scripts/simulacao_poder.py   --coleta piloto
+python3 scripts/diagnostico_ordem.py --coleta piloto
 ```
 
 ---
@@ -164,3 +166,20 @@ python3 scripts/simulacao_poder.py --coleta piloto [--replicas 2000] [--efeito 0
 ```
 
 Reaproveita o Lab04: simula o Mann-Whitney com dados log-normais que têm o CV observado no piloto (o maior entre Redis e Valkey). Mede o erro tipo I (efeito 0, n = 30) e o poder para detectar 5% de diferença com n de 5 a 50, em α = 0,05 e em α = 0,0025 (pior caso do Holm com 20 testes). Gera `erro_tipo1.csv`, `poder.csv`, `poder.md` e `poder.png` em `results/<coleta>/`.
+
+---
+
+## `diagnostico_ordem.py`: deriva temporal
+
+```bash
+python3 scripts/diagnostico_ordem.py --coleta piloto [--limiar 10]
+```
+
+A ordem das execuções é sorteada para que uma interferência passageira (frequência da CPU, processo em segundo plano) não favoreça um tratamento. Este script confere se essa interferência existiu e se ela muda as conclusões:
+
+1. **Desvio** de cada execução válida em relação à mediana do seu tratamento, em %, para M1–M5 (as 8 condições ficam na mesma escala);
+2. **Tendência:** correlação de Spearman entre a ordem de execução e o desvio, em todas as execuções e por software;
+3. **Episódios:** execuções com vazão pelo menos `--limiar`% (padrão 10%) abaixo da mediana do tratamento; vizinhas na sequência formam um episódio;
+4. **Sensibilidade:** diferença % das medianas (Valkey × Redis) por condição, com todas as execuções e sem as sinalizadas.
+
+Nada é removido da análise principal. Gera em `results/<coleta>/`: `ordem_desvios.csv` (desvios e coluna `sinalizada`), `ordem.md` (tendência, episódios e sensibilidade) e `ordem_desvios.png` (desvio × ordem, por métrica).
