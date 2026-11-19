@@ -1,0 +1,5 @@
+# Dependencias de desenvolvimento: as da analise + o executor de testes.
+#   pip install -r requirements-dev.txt
+#   python3 -m pytest
+-r requirements.txt
+pytest==9.1.1
