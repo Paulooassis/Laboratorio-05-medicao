@@ -128,6 +128,13 @@ python3 scripts/simulacao_poder.py   --coleta piloto                 # poder e e
 python3 scripts/diagnostico_ordem.py --coleta piloto                 # deriva ao longo da coleta
 ```
 
+**Testes** (regras de validação e funções estatísticas):
+
+```bash
+pip install -r requirements-dev.txt
+python3 -m pytest
+```
+
 No Windows, troque `python3` por `py`. Ajuste `--cpus-servidor` e `--cpus-cliente` à topologia da sua máquina (`lscpu -e` no Linux). Detalhes de cada script, opções e saídas: [scripts/README.md](scripts/README.md).
 
 ## Estrutura do repositório
@@ -135,12 +142,14 @@ No Windows, troque `python3` por `py`. Ajuste `--cpus-servidor` e `--cpus-client
 ```
 docs/                     proposta: software, pergunta, GQM, categorias, planos, piloto
 scripts/                  coleta, validação, análise e simulação (ver scripts/README.md)
+tests/                    testes automatizados da validação e da análise (pytest)
 data/impacto/             evidências públicas de impacto (CSV/JSON com fonte e data)
 data/raw/<coleta>/        saída bruta do memtier, amostras de CPU, metadados e log
 data/processed/           uma linha por execução (_execucoes.csv) e versão validada (_validado.csv)
 results/<coleta>/         tabelas e gráficos da validação, da análise e da simulação de poder
 docker-compose.yml        ambiente com Redis, Valkey e memtier nas versões do estudo
 requirements.txt          bibliotecas Python com versões fixadas
+requirements-dev.txt      requirements.txt + pytest, para rodar os testes
 ```
 
 ## Ética
