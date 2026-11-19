@@ -20,6 +20,8 @@ python3 scripts/simulacao_poder.py   --coleta piloto
 python3 scripts/diagnostico_ordem.py --coleta piloto
 ```
 
+As regras de validação e as funções estatísticas têm testes em [`tests/`](../tests/): `pip install -r requirements-dev.txt` e `python3 -m pytest`.
+
 ---
 
 ## `coleta_impacto.py`: evidências de impacto
