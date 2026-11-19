@@ -1,0 +1,428 @@
+{
+  "coleta": "piloto",
+  "criado_em": "2026-11-19T17:19:39+00:00",
+  "semente": 20261119,
+  "parametros": {
+    "repeticoes": 5,
+    "duracao_s": 30,
+    "aquecimento": true,
+    "threads": 4,
+    "conexoes_por_thread": 50,
+    "tamanho_valor_bytes": 256,
+    "chaves": 100000,
+    "pipelines": [
+      1,
+      16
+    ],
+    "comandos": {
+      "GET": "0:1",
+      "SET": "1:0"
+    },
+    "cpus_servidor": "0,4",
+    "cpus_cliente": "1-3,5-7"
+  },
+  "ambiente": {
+    "so": "Linux-6.8.0-149-generic-x86_64-with-glibc2.35",
+    "python": "3.10.12",
+    "cpu": "11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz",
+    "cpus_logicas": 8,
+    "ram": "31.1 GiB",
+    "governador_cpu": "powersave",
+    "docker": "29.1.3",
+    "memtier": [
+      "memtier_benchmark v=2.6.1 sha=00000000:0 bits=64 libevent=2.1.12-stable openssl=OpenSSL 3.0.2 15 Mar 2022 prometheus=yes"
+    ],
+    "git_commit": "0ae0cd6bf5d56f4203250c0150f81aecb1482cc7"
+  },
+  "imagens": {
+    "redis:8.10.3": "redis@sha256:1f88291b4c57bdf249f02eb085a8669889b2d2954e91d4de5118a5da6b78dd53",
+    "valkey/valkey:9.1.3": "valkey/valkey@sha256:3add1a336a920ea54770a001ab6feb3da5fceea96a40373a3a2cd469b815f0b7",
+    "redislabs/memtier_benchmark:2.6.1": "redislabs/memtier_benchmark@sha256:41849040f6ea0b335c31ae532b1488ce47ea6e8c48a086d661f3d6953d3b599d"
+  },
+  "plano": [
+    {
+      "ordem": 1,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 0,
+      "aquecimento": true
+    },
+    {
+      "ordem": 2,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 0,
+      "aquecimento": true
+    },
+    {
+      "ordem": 3,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 0,
+      "aquecimento": true
+    },
+    {
+      "ordem": 4,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 0,
+      "aquecimento": true
+    },
+    {
+      "ordem": 5,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 0,
+      "aquecimento": true
+    },
+    {
+      "ordem": 6,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 0,
+      "aquecimento": true
+    },
+    {
+      "ordem": 7,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 0,
+      "aquecimento": true
+    },
+    {
+      "ordem": 8,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 0,
+      "aquecimento": true
+    },
+    {
+      "ordem": 9,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 5,
+      "aquecimento": false
+    },
+    {
+      "ordem": 10,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 3,
+      "aquecimento": false
+    },
+    {
+      "ordem": 11,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 3,
+      "aquecimento": false
+    },
+    {
+      "ordem": 12,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 2,
+      "aquecimento": false
+    },
+    {
+      "ordem": 13,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 5,
+      "aquecimento": false
+    },
+    {
+      "ordem": 14,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 4,
+      "aquecimento": false
+    },
+    {
+      "ordem": 15,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 4,
+      "aquecimento": false
+    },
+    {
+      "ordem": 16,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 5,
+      "aquecimento": false
+    },
+    {
+      "ordem": 17,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 4,
+      "aquecimento": false
+    },
+    {
+      "ordem": 18,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 3,
+      "aquecimento": false
+    },
+    {
+      "ordem": 19,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 3,
+      "aquecimento": false
+    },
+    {
+      "ordem": 20,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 4,
+      "aquecimento": false
+    },
+    {
+      "ordem": 21,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 1,
+      "aquecimento": false
+    },
+    {
+      "ordem": 22,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 3,
+      "aquecimento": false
+    },
+    {
+      "ordem": 23,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 3,
+      "aquecimento": false
+    },
+    {
+      "ordem": 24,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 1,
+      "aquecimento": false
+    },
+    {
+      "ordem": 25,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 2,
+      "aquecimento": false
+    },
+    {
+      "ordem": 26,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 5,
+      "aquecimento": false
+    },
+    {
+      "ordem": 27,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 1,
+      "aquecimento": false
+    },
+    {
+      "ordem": 28,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 3,
+      "aquecimento": false
+    },
+    {
+      "ordem": 29,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 1,
+      "aquecimento": false
+    },
+    {
+      "ordem": 30,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 2,
+      "aquecimento": false
+    },
+    {
+      "ordem": 31,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 2,
+      "aquecimento": false
+    },
+    {
+      "ordem": 32,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 5,
+      "aquecimento": false
+    },
+    {
+      "ordem": 33,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 1,
+      "aquecimento": false
+    },
+    {
+      "ordem": 34,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 1,
+      "aquecimento": false
+    },
+    {
+      "ordem": 35,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 5,
+      "aquecimento": false
+    },
+    {
+      "ordem": 36,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 1,
+      "aquecimento": false
+    },
+    {
+      "ordem": 37,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 2,
+      "aquecimento": false
+    },
+    {
+      "ordem": 38,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 1,
+      "aquecimento": false
+    },
+    {
+      "ordem": 39,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 5,
+      "aquecimento": false
+    },
+    {
+      "ordem": 40,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 2,
+      "aquecimento": false
+    },
+    {
+      "ordem": 41,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 4,
+      "aquecimento": false
+    },
+    {
+      "ordem": 42,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 1,
+      "repeticao": 2,
+      "aquecimento": false
+    },
+    {
+      "ordem": 43,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 5,
+      "aquecimento": false
+    },
+    {
+      "ordem": 44,
+      "software": "redis",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 3,
+      "aquecimento": false
+    },
+    {
+      "ordem": 45,
+      "software": "redis",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 4,
+      "aquecimento": false
+    },
+    {
+      "ordem": 46,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 1,
+      "repeticao": 4,
+      "aquecimento": false
+    },
+    {
+      "ordem": 47,
+      "software": "valkey",
+      "comando": "GET",
+      "pipeline": 16,
+      "repeticao": 4,
+      "aquecimento": false
+    },
+    {
+      "ordem": 48,
+      "software": "valkey",
+      "comando": "SET",
+      "pipeline": 16,
+      "repeticao": 2,
+      "aquecimento": false
+    }
+  ]
+}
