@@ -1,0 +1,21 @@
+metrica,comando,pipeline,n,alfa,taxa_rejeicao_h0_verdadeira
+M1 Vazão,GET,1,30,0.05,0.0455
+M2 Latência p50,GET,1,30,0.05,0.0495
+M3 Latência p99,GET,1,30,0.05,0.0455
+M4 Memória,GET,1,30,0.05,0.0455
+M5 CPU,GET,1,30,0.05,0.04
+M1 Vazão,GET,16,30,0.05,0.049
+M2 Latência p50,GET,16,30,0.05,0.046
+M3 Latência p99,GET,16,30,0.05,0.0375
+M4 Memória,GET,16,30,0.05,0.0455
+M5 CPU,GET,16,30,0.05,0.045
+M1 Vazão,SET,1,30,0.05,0.048
+M2 Latência p50,SET,1,30,0.05,0.044
+M3 Latência p99,SET,1,30,0.05,0.054
+M4 Memória,SET,1,30,0.05,0.0465
+M5 CPU,SET,1,30,0.05,0.0415
+M1 Vazão,SET,16,30,0.05,0.04
+M2 Latência p50,SET,16,30,0.05,0.0465
+M3 Latência p99,SET,16,30,0.05,0.0415
+M4 Memória,SET,16,30,0.05,0.049
+M5 CPU,SET,16,30,0.05,0.053

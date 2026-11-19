@@ -59,9 +59,9 @@ As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma
 | Docker / Docker Compose | Isolar servidor e cliente em contêineres | registrar `docker version` na coleta |
 | `redis:8.10.3` | Servidor Redis (imagem oficial) | *digest* registrado no arquivo de metadados |
 | `valkey/valkey:9.1.3` | Servidor Valkey (imagem oficial) | *digest* registrado no arquivo de metadados |
-| `redislabs/memtier_benchmark` | Gerador de carga, **o mesmo para os dois servidores** | tag fixada na coleta |
+| `redislabs/memtier_benchmark:2.6.1` | Gerador de carga, **o mesmo para os dois servidores** | 2.6.1 (*digest* registrado no arquivo de metadados) |
 | `docker stats` + `INFO memory` | Uso de CPU e memória | — |
-| Python 3 (`scripts/`) | Orquestrar as execuções, sortear a ordem e salvar CSV/JSON | 3.13 |
+| Python 3 (`scripts/`) | Orquestrar as execuções, sortear a ordem, validar e analisar | 3.10+ (bibliotecas fixadas em `requirements.txt`) |
 
 ### Desenho e amostra
 
@@ -69,13 +69,13 @@ As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma
 - **Repetições:** **30 execuções independentes por tratamento**, totalizando **240 execuções** de 30 s cada (≈ 2 h 40 min com reinícios).
 - **Unidade experimental:** uma execução completa (contêiner novo → carga → coleta das métricas → contêiner removido).
 - **Aleatorização:** a ordem das 240 execuções é sorteada com semente fixa (registrada), para que efeitos de temperatura, *throttling* ou processos de fundo não se concentrem em um só software.
-- **Aquecimento:** 1 execução de aquecimento por tratamento, descartada.
+- **Aquecimento:** 1 execução de aquecimento por tratamento, descartada (as 8 rodam antes das medidas, em ordem sorteada).
 
 ### Procedimento de cada execução
 
-1. Subir o contêiner do servidor com CPUs fixadas (`--cpuset-cpus=0-1`) e configuração padrão.
+1. Subir o contêiner do servidor com CPUs fixadas (`--cpuset-cpus=0,4`, um núcleo físico) e configuração padrão.
 2. Popular 100.000 chaves com valores de 256 bytes (necessário para o `GET`).
-3. Rodar a carga no contêiner do cliente, em outras CPUs (`--cpuset-cpus=2-5`):
+3. Rodar a carga no contêiner do cliente, em outros núcleos físicos (`--cpuset-cpus=1-3,5-7`). As CPUs foram ajustadas após o piloto (ver [docs/04](04-coleta-piloto.md)):
    ```
    memtier_benchmark -s <servidor> -p 6379 -t 4 -c 50 --test-time=30 \
      --data-size=256 --key-maximum=100000 --key-pattern=R:R \
@@ -98,6 +98,10 @@ As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma
 ### Evidências de impacto
 
 - Coletadas pelo script `scripts/coleta_impacto.py` (tarefa 4), uma vez no início e outra no fim do estudo.
+
+### Scripts que implementam este plano
+
+`scripts/coleta_experimento.py` (execuções), `scripts/validacao_dados.py` (regras de validação), `scripts/analise.py` (plano de análise) e `scripts/simulacao_poder.py` (poder e erro tipo I). Como rodar: [`scripts/README.md`](../scripts/README.md).
 
 ### Regras de ética
 

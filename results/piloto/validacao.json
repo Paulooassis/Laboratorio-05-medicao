@@ -1,0 +1,126 @@
+{
+  "coleta": "piloto",
+  "total_registros": 48,
+  "aquecimento": 8,
+  "validos": 40,
+  "descartados": 8,
+  "descartados_exceto_aquecimento": 0,
+  "motivos_descarte": {
+    "V2 aquecimento": 8
+  },
+  "repeticoes_esperadas_por_tratamento": 5,
+  "validas_por_tratamento": [
+    {
+      "software": "Redis",
+      "comando": "GET",
+      "pipeline": 1,
+      "validas": 5
+    },
+    {
+      "software": "Redis",
+      "comando": "GET",
+      "pipeline": 16,
+      "validas": 5
+    },
+    {
+      "software": "Redis",
+      "comando": "SET",
+      "pipeline": 1,
+      "validas": 5
+    },
+    {
+      "software": "Redis",
+      "comando": "SET",
+      "pipeline": 16,
+      "validas": 5
+    },
+    {
+      "software": "Valkey",
+      "comando": "GET",
+      "pipeline": 1,
+      "validas": 5
+    },
+    {
+      "software": "Valkey",
+      "comando": "GET",
+      "pipeline": 16,
+      "validas": 5
+    },
+    {
+      "software": "Valkey",
+      "comando": "SET",
+      "pipeline": 1,
+      "validas": 5
+    },
+    {
+      "software": "Valkey",
+      "comando": "SET",
+      "pipeline": 16,
+      "validas": 5
+    }
+  ],
+  "tratamentos_incompletos": [],
+  "outliers_sinalizados": 15,
+  "outliers_detalhe": [
+    {
+      "run_id": "0012-valkey-get-p16-t1",
+      "outliers": "mem_rss_mib"
+    },
+    {
+      "run_id": "0013-redis-get-p1-t1",
+      "outliers": "ops_s lat_p99_ms"
+    },
+    {
+      "run_id": "0015-valkey-set-p16-t1",
+      "outliers": "lat_p99_ms mem_rss_mib"
+    },
+    {
+      "run_id": "0017-redis-get-p16-t1",
+      "outliers": "ops_s lat_p50_ms lat_p99_ms mem_rss_mib cpu_medio_pct"
+    },
+    {
+      "run_id": "0018-redis-get-p1-t1",
+      "outliers": "ops_s lat_p50_ms lat_p99_ms cpu_medio_pct"
+    },
+    {
+      "run_id": "0019-redis-set-p1-t1",
+      "outliers": "ops_s lat_p50_ms"
+    },
+    {
+      "run_id": "0022-valkey-get-p1-t1",
+      "outliers": "lat_p99_ms"
+    },
+    {
+      "run_id": "0024-redis-get-p16-t1",
+      "outliers": "mem_rss_mib"
+    },
+    {
+      "run_id": "0025-valkey-get-p1-t1",
+      "outliers": "mem_rss_mib"
+    },
+    {
+      "run_id": "0029-redis-get-p1-t1",
+      "outliers": "cpu_medio_pct"
+    },
+    {
+      "run_id": "0032-valkey-get-p1-t1",
+      "outliers": "lat_p99_ms"
+    },
+    {
+      "run_id": "0035-redis-get-p16-t1",
+      "outliers": "cpu_medio_pct"
+    },
+    {
+      "run_id": "0041-redis-set-p16-t1",
+      "outliers": "lat_p99_ms"
+    },
+    {
+      "run_id": "0044-redis-set-p16-t1",
+      "outliers": "cpu_medio_pct"
+    },
+    {
+      "run_id": "0048-valkey-set-p16-t1",
+      "outliers": "lat_p50_ms"
+    }
+  ]
+}
