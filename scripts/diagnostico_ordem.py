@@ -16,13 +16,19 @@ docs/04-coleta-piloto.md):
 4. Sensibilidade: diferenca % das medianas (Valkey x Redis) de M1-M5 por
    condicao, com todas as execucoes e sem as sinalizadas. Se a diferenca mudar
    muito, a conclusao depende de poucas execucoes afetadas.
+5. Criterio de aceite (mini-piloto e coleta completa, docs/05, D1): APROVADO se
+   nenhuma execucao for sinalizada e nenhuma tendencia de M1-M3, com todas as
+   execucoes juntas, tiver |rho| > --rho-max (padrao 0,3) e p < 0,05. A
+   tendencia por software so e informativa: com ~20 execucoes por software,
+   |rho| = 0,3 aparece por acaso (simulado: o criterio so com |rho| > 0,3 em
+   todos os grupos reprova 79% das coletas sem deriva; este, 13%).
 
 Nada e removido da analise principal (analise.py): este e um diagnostico, para
 discussao das ameacas a validade e para conferir o mini-piloto da S02 (A1).
 
 Saidas em results/<coleta>/:
   ordem_desvios.csv     uma linha por execucao valida, com o desvio de M1-M5
-  ordem.md              tendencia, episodios e sensibilidade
+  ordem.md              criterio de aceite, tendencia, episodios e sensibilidade
   ordem_desvios.png     desvio x ordem de execucao, por metrica
 
 Uso:
@@ -52,12 +58,22 @@ METRICAS = {
     "mem_rss_mib": "M4 Memória",
     "cpu_medio_pct": "M5 CPU",
 }
-TRATAMENTO = ["software", "comando", "pipeline"]
+TRATAMENTO = ["software", "comando", "pipeline", "taxa"]
+METRICAS_CRITERIO = ["ops_s", "lat_p50_ms", "lat_p99_ms"]
+ALFA_TENDENCIA = 0.05
 SOFTWARES = ["Redis", "Valkey"]
 CORES = {"Redis": "#c0392b", "Valkey": "#2471a3"}
 
 
+def com_taxa(df: pd.DataFrame) -> pd.DataFrame:
+    """Coletas sem a coluna `taxa` (piloto) sao todas de carga saturada (taxa 0)."""
+    df = df.copy()
+    df["taxa"] = df["taxa"].fillna(0).astype(int) if "taxa" in df else 0
+    return df
+
+
 def desvios(df: pd.DataFrame) -> pd.DataFrame:
+    df = com_taxa(df)
     out = df[["run_id", "ordem", "inicio", *TRATAMENTO]].copy()
     for m in METRICAS:
         med = df.groupby(TRATAMENTO)[m].transform("median")
@@ -94,15 +110,28 @@ def sensibilidade(df: pd.DataFrame, excluir: set[str]) -> pd.DataFrame:
         return 100 * (v - r) / r
 
     linhas = []
+    df = com_taxa(df)
     sem = df[~df["run_id"].isin(excluir)]
-    for (cmd, pipe), g in df.groupby(["comando", "pipeline"]):
-        g_sem = sem[(sem["comando"] == cmd) & (sem["pipeline"] == pipe)]
+    for (cmd, pipe, taxa), g in df.groupby(["comando", "pipeline", "taxa"]):
+        g_sem = sem[(sem["comando"] == cmd) & (sem["pipeline"] == pipe) & (sem["taxa"] == taxa)]
         for m, nome in METRICAS.items():
             a, b = dif(g, m), dif(g_sem, m)
-            linhas.append(dict(metrica=nome, comando=cmd, pipeline=pipe,
+            linhas.append(dict(metrica=nome, comando=cmd, pipeline=pipe, taxa=taxa,
                                n_excluidas=int(len(g) - len(g_sem)),
                                dif_todas_pct=a, dif_sem_sinalizadas_pct=b, variacao_pp=b - a))
-    return pd.DataFrame(linhas).sort_values(["metrica", "comando", "pipeline"]).reset_index(drop=True)
+    return pd.DataFrame(linhas).sort_values(["metrica", "comando", "pipeline", "taxa"]).reset_index(drop=True)
+
+
+def criterio(tend: pd.DataFrame, eps: list[pd.DataFrame], rho_max: float) -> tuple[bool, list[str]]:
+    """Aceite da coleta quanto a deriva: sem episodios e sem tendencia geral forte em M1-M3."""
+    falhas = [f"{len(g)} execução(ões) sinalizada(s) na ordem {g['ordem'].min()}–{g['ordem'].max()}"
+              for g in eps]
+    nomes = [METRICAS[m] for m in METRICAS_CRITERIO]
+    fortes = tend[tend["metrica"].isin(nomes) & (tend["grupo"] == "Todos")
+                  & (tend["rho"].abs() > rho_max) & (tend["p"] < ALFA_TENDENCIA)]
+    falhas += [f"tendência em {r.metrica} ({r.grupo}): ρ = {fmt(r.rho)}, p = {fmt(r.p, 4)}"
+               for r in fortes.itertuples()]
+    return not falhas, falhas
 
 
 def grafico(dv: pd.DataFrame, sinalizadas: set[str], limiar: float, arq: Path) -> None:
@@ -134,11 +163,18 @@ def fmt(x: float, casas: int = 2) -> str:
 
 
 def em_markdown(coleta: str, limiar: float, tend: pd.DataFrame, eps: list[pd.DataFrame],
-                sens: pd.DataFrame) -> str:
+                sens: pd.DataFrame, rho_max: float) -> str:
+    aprovado, falhas = criterio(tend, eps, rho_max)
     l = [f"# Diagnóstico de deriva temporal: coleta `{coleta}`", "",
          "Desvio % = (valor − mediana do tratamento) / mediana do tratamento. "
          "Gráfico: [ordem_desvios.png](ordem_desvios.png).", "",
-         "## Tendência ao longo da coleta (Spearman: ordem × desvio)", "",
+         "## Critério de aceite", "",
+         f"Nenhuma execução com vazão ≥ {fmt(limiar, 0)}% abaixo da mediana do tratamento e nenhuma "
+         f"tendência em M1–M3, com todas as execuções juntas, com |ρ| > {fmt(rho_max)} e p < "
+         f"{fmt(ALFA_TENDENCIA)}. A tendência por software (tabela abaixo) é só informativa.", "",
+         f"**Resultado: {'APROVADO' if aprovado else 'REPROVADO'}**", ""]
+    l += [f"- {f}" for f in falhas]
+    l += ["", "## Tendência ao longo da coleta (Spearman: ordem × desvio)", "",
          "| Métrica | Grupo | n | ρ | p |", "|---|---|---|---|---|"]
     l += [f"| {r.metrica} | {r.grupo} | {r.n} | {fmt(r.rho)} | {fmt(r.p, 4)} |" for r in tend.itertuples()]
 
@@ -159,9 +195,10 @@ def em_markdown(coleta: str, limiar: float, tend: pd.DataFrame, eps: list[pd.Dat
     l += ["## Sensibilidade: diferença Valkey × Redis sem as execuções sinalizadas", "",
           "Diferença = (mediana Valkey − mediana Redis) / mediana Redis. "
           "Variação em pontos percentuais (p.p.).", "",
-          "| Métrica | Comando | Pipeline | Excluídas | Dif. todas (%) | Dif. sem sinalizadas (%) | Variação (p.p.) |",
-          "|---|---|---|---|---|---|---|"]
-    l += [f"| {r.metrica} | {r.comando} | {r.pipeline} | {r.n_excluidas} | {fmt(r.dif_todas_pct, 1)} | "
+          "| Métrica | Comando | Pipeline | Carga (ops/s) | Excluídas | Dif. todas (%) | Dif. sem sinalizadas (%) "
+          "| Variação (p.p.) |",
+          "|---|---|---|---|---|---|---|---|"]
+    l += [f"| {r.metrica} | {r.comando} | {r.pipeline} | {r.taxa or 'saturada'} | {r.n_excluidas} | {fmt(r.dif_todas_pct, 1)} | "
           f"{fmt(r.dif_sem_sinalizadas_pct, 1)} | {fmt(r.variacao_pp, 1)} |" for r in sens.itertuples()]
     return "\n".join(l) + "\n"
 
@@ -171,6 +208,8 @@ def main() -> int:
     ap.add_argument("--coleta", default="piloto")
     ap.add_argument("--limiar", type=float, default=10.0,
                     help="queda de vazão (%% abaixo da mediana do tratamento) que sinaliza a execução")
+    ap.add_argument("--rho-max", type=float, default=0.3,
+                    help="maior |rho| de Spearman (ordem x desvio, todas as execucoes) aceito em M1-M3")
     args = ap.parse_args()
 
     entrada = RAIZ / "data" / "processed" / f"{args.coleta}_validado.csv"
@@ -191,7 +230,7 @@ def main() -> int:
     dv["sinalizada"] = dv["run_id"].isin(sinalizadas)
     dv.to_csv(saida / "ordem_desvios.csv", index=False)
     grafico(dv, sinalizadas, args.limiar, saida / "ordem_desvios.png")
-    md = em_markdown(args.coleta, args.limiar, tend, eps, sens)
+    md = em_markdown(args.coleta, args.limiar, tend, eps, sens, args.rho_max)
     (saida / "ordem.md").write_text(md, encoding="utf-8")
 
     print(md)

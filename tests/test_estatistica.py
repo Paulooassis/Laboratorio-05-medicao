@@ -149,6 +149,38 @@ def test_testes_detecta_so_a_memoria():
     assert not tst.loc[tst["metrica"] != "M4", "relevante_5pct"].any()
 
 
+def com_carga_fixa(df: pd.DataFrame, n: int, semente: int = 1) -> pd.DataFrame:
+    """Acrescenta a carga fixa (GET e SET, pipeline 1, 50 mil ops/s): o Valkey gasta 10% menos CPU."""
+    rng = np.random.default_rng(semente)
+    linhas, ordem = [], len(df)
+    for sw in analise.SOFTWARES:
+        for cmd in ["GET", "SET"]:
+            for rep in range(n):
+                ordem += 1
+                linhas.append(dict(
+                    run_id=f"{ordem:04d}", ordem=ordem, inicio=f"2026-11-19T18:{ordem % 60:02d}:00+00:00",
+                    software=sw, comando=cmd, pipeline=1, taxa=50_000, repeticao=rep,
+                    ops_s=rng.normal(50_000, 50), lat_p50_ms=rng.normal(0.4, 0.01),
+                    lat_p99_ms=rng.normal(0.9, 0.03), mem_rss_mib=rng.normal(60, 0.1),
+                    cpu_medio_pct=rng.normal(45 * (0.9 if sw == "Valkey" else 1), 0.5)))
+    return pd.concat([df.assign(taxa=0), pd.DataFrame(linhas)], ignore_index=True)
+
+
+def test_testes_com_carga_fixa_testa_cpu_so_na_carga_fixa():
+    tst = analise.testes(com_carga_fixa(dados_sinteticos(n=30), n=30))
+    assert len(tst) == 18  # M1-M4 x 4 condicoes saturadas + M5 x 2 de carga fixa (docs/05, D2)
+    cpu = tst[tst["metrica"] == "M5"]
+    assert (cpu["taxa"] == 50_000).all() and len(cpu) == 2
+    assert cpu["significativo_holm"].all()
+    assert np.allclose(cpu["dif_mediana_pct"], -10, atol=0.5)
+    assert (tst.loc[tst["metrica"] != "M5", "taxa"] == 0).all()
+
+
+def test_descritiva_separa_carga_fixa_e_saturada():
+    desc = analise.descritiva(com_carga_fixa(dados_sinteticos(), n=6))
+    assert len(desc) == 12 * len(analise.METRICAS)  # 8 tratamentos saturados + 4 de carga fixa
+
+
 def test_testes_escolhe_mann_whitney_quando_nao_e_normal():
     df = dados_sinteticos(n=30)
     assimetrica = (df["software"] == "Redis") & (df["comando"] == "GET") & (df["pipeline"] == 1)
@@ -191,6 +223,40 @@ def test_sensibilidade_sem_exclusao_nao_muda_a_diferenca():
     assert len(sens) == 20
     assert (sens["n_excluidas"] == 0).all()
     np.testing.assert_allclose(sens["variacao_pp"], 0)
+
+
+def test_criterio_aprova_coleta_sem_deriva():
+    # Semente sem falso alarme: o criterio reprova ~13% das coletas sem deriva (docs/05, D1)
+    df = dados_sinteticos(n=5)
+    df["ordem"] = np.random.default_rng(1).permutation(len(df)) + 1
+    dv = diag.desvios(df)
+    aprovado, falhas = diag.criterio(diag.tendencia(dv), diag.episodios(dv, limiar=10), rho_max=0.3)
+    assert aprovado and falhas == []
+
+
+def test_criterio_reprova_episodio_e_tendencia():
+    df = dados_sinteticos(n=5)
+    df["ordem"] = np.random.default_rng(4).permutation(len(df)) + 1
+    df.loc[df["ordem"].isin([10, 11]), "ops_s"] *= 0.8
+    df["lat_p50_ms"] *= 1 + 0.005 * df["ordem"]
+    dv = diag.desvios(df)
+    aprovado, falhas = diag.criterio(diag.tendencia(dv), diag.episodios(dv, limiar=10), rho_max=0.3)
+    assert not aprovado
+    assert any("sinalizada" in f for f in falhas)
+    assert any("M2 Latência p50 (Todos)" in f for f in falhas)
+
+
+def test_criterio_ignora_tendencia_so_de_um_software():
+    """|rho| alto num grupo de ~20 execucoes aparece por acaso: so a tendencia geral reprova."""
+    tend = pd.DataFrame([
+        dict(metrica="M1 Vazão", grupo="Todos", n=40, rho=-0.20, p=0.21),
+        dict(metrica="M1 Vazão", grupo="Valkey", n=20, rho=-0.58, p=0.008),  # como no piloto
+        dict(metrica="M2 Latência p50", grupo="Todos", n=40, rho=0.35, p=0.08),  # forte, mas nao significativa
+    ])
+    assert diag.criterio(tend, [], rho_max=0.3) == (True, [])
+    tend.loc[2, "p"] = 0.01
+    aprovado, falhas = diag.criterio(tend, [], rho_max=0.3)
+    assert not aprovado and len(falhas) == 1 and "M2 Latência p50 (Todos)" in falhas[0]
 
 
 def test_tendencia_detecta_deriva_crescente():
