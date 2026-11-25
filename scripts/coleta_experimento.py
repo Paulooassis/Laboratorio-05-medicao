@@ -1,12 +1,24 @@
 """Orquestra as execucoes do experimento Redis x Valkey.
 
-Desenho fatorial 2 (software) x 2 (comando) x 2 (pipeline) = 8 tratamentos.
-Cada execucao e uma unidade experimental independente:
+Desenho fatorial 2 (software) x 2 (comando) x 2 (pipeline) = 8 tratamentos em
+carga saturada, mais 2 (software) x 2 (comando) em carga fixa (pipeline 1,
+--taxa-fixa ops/s no total, abaixo da saturacao), em que a CPU (M5) e comparavel
+(docs/05-revisao-piloto-tamanho-amostra.md). Cada execucao e uma unidade
+experimental independente:
 
     conteiner novo do servidor -> popula as chaves -> carga com memtier_benchmark
     (amostrando CPU com docker stats a cada ~1 s) -> INFO memory -> remove conteiner
 
-A ordem das execucoes e sorteada com semente fixa. Cada execucao gera:
+A ordem e sorteada com semente fixa em blocos completos (--ordem blocos, padrao):
+cada bloco tem uma execucao de cada tratamento, em ordem sorteada, para que uma
+deriva da maquina ao longo da coleta se distribua igualmente entre os
+tratamentos. O piloto usou o sorteio livre (--ordem sorteio --taxa-fixa 0).
+
+Antes de coletar, o script confere se a maquina esta na tomada e com o
+governador de CPU em `performance` (Linux) e para se nao estiver
+(--ignorar-ambiente pula a checagem, e isso fica nos metadados).
+
+Cada execucao gera:
 - data/raw/<coleta>/<run_id>.json        saida bruta do memtier_benchmark
 - data/raw/<coleta>/<run_id>_meta.json   amostras de CPU, INFO memory e versao
 - uma linha em data/processed/<coleta>_execucoes.csv
@@ -19,7 +31,8 @@ Etica: toda a carga e gerada e recebida dentro da maquina do grupo
 
 Uso:
     python3 scripts/coleta_experimento.py --coleta piloto --repeticoes 5
-    python3 scripts/coleta_experimento.py --coleta completa --repeticoes 30
+    python3 scripts/coleta_experimento.py --coleta minipiloto --repeticoes 3
+    python3 scripts/coleta_experimento.py --coleta completa --repeticoes 50
     python3 scripts/coleta_experimento.py --coleta teste --repeticoes 1 --duracao 5 --dry-run
 
 Requer Docker. Usa apenas a biblioteca padrao do Python (3.9+).
@@ -60,10 +73,11 @@ CONEXOES = 50
 TAMANHO_VALOR = 256
 CHAVES = 100_000
 REDE = "lab05-net"
+TAXA_FIXA = 50_000  # ops/s no total na carga fixa: ~43% da vazao saturada com pipeline 1 no piloto
 
 COLUNAS = [
-    "run_id", "coleta", "ordem", "tentativa", "aquecimento", "software", "versao",
-    "versao_reportada", "comando", "pipeline", "repeticao", "inicio", "fim",
+    "run_id", "coleta", "ordem", "bloco", "tentativa", "aquecimento", "software", "versao",
+    "versao_reportada", "comando", "pipeline", "taxa", "repeticao", "inicio", "fim",
     "ops_s", "lat_media_ms", "lat_p50_ms", "lat_p99_ms", "lat_p999_ms",
     "erros_conexao", "misses_s", "mem_rss_mib", "mem_usada_mib",
     "cpu_medio_pct", "cpu_amostras", "status", "erro",
@@ -173,8 +187,8 @@ def executar(exec_: dict, args: argparse.Namespace, dir_raw: Path) -> dict:
     run_id = exec_["run_id"]
     nome = f"lab05-srv-{run_id}"
     linha = {k: "" for k in COLUNAS}
-    linha.update({k: exec_[k] for k in ("run_id", "coleta", "ordem", "tentativa", "aquecimento",
-                                         "comando", "pipeline", "repeticao")})
+    linha.update({k: exec_[k] for k in ("run_id", "coleta", "ordem", "bloco", "tentativa", "aquecimento",
+                                         "comando", "pipeline", "taxa", "repeticao")})
     linha.update(software=sw["nome"], versao=sw["versao"],
                  inicio=datetime.now(timezone.utc).isoformat(timespec="seconds"))
     amostrador = None
@@ -192,13 +206,15 @@ def executar(exec_: dict, args: argparse.Namespace, dir_raw: Path) -> dict:
                 args.cpus_cliente, dir_raw, timeout=120)
 
         # 2) carga medida, com amostragem de CPU em paralelo
+        #    (carga fixa: --rate-limiting e por conexao, entao divide a taxa total)
+        limite = [f"--rate-limiting={exec_['taxa'] // (THREADS * CONEXOES)}"] if exec_["taxa"] else []
         amostrador = AmostradorCPU(nome)
         amostrador.start()
         t0 = time.time()
         memtier(["-s", nome, "-p", "6379", "-t", str(THREADS), "-c", str(CONEXOES),
                  f"--test-time={args.duracao}", f"--data-size={TAMANHO_VALOR}",
                  f"--key-maximum={CHAVES}", "--key-pattern=R:R",
-                 f"--ratio={COMANDOS[exec_['comando']]}", f"--pipeline={exec_['pipeline']}",
+                 f"--ratio={COMANDOS[exec_['comando']]}", f"--pipeline={exec_['pipeline']}", *limite,
                  "--hide-histogram", f"--json-out-file=/out/{run_id}.json"],
                 args.cpus_cliente, dir_raw, timeout=args.duracao + 90)
         t1 = time.time()
@@ -262,15 +278,36 @@ def executar(exec_: dict, args: argparse.Namespace, dir_raw: Path) -> dict:
     return linha
 
 
+def tratamentos(taxa_fixa: int) -> list[dict]:
+    """Carga saturada (taxa 0 = sem limite) nos 8 tratamentos e, se taxa_fixa > 0,
+    carga fixa com pipeline 1 para os 2 softwares x 2 comandos."""
+    saturada = [dict(software=s, comando=c, pipeline=p, taxa=0)
+                for s, c, p in itertools.product(SOFTWARES, COMANDOS, PIPELINES)]
+    fixa = [dict(software=s, comando=c, pipeline=1, taxa=taxa_fixa)
+            for s, c in itertools.product(SOFTWARES, COMANDOS)] if taxa_fixa else []
+    return saturada + fixa
+
+
 def montar_plano(args: argparse.Namespace) -> list[dict]:
+    """Aquecimentos (bloco 0) e depois as execucoes medidas.
+
+    - ordem "blocos": o bloco r tem a repeticao r de cada tratamento, em ordem sorteada.
+    - ordem "sorteio": todas as execucoes medidas sorteadas de uma vez (como no piloto).
+    """
     rng = random.Random(args.semente)
-    tratamentos = list(itertools.product(SOFTWARES, COMANDOS, PIPELINES))
-    aquec = [dict(software=s, comando=c, pipeline=p, repeticao=0, aquecimento=True)
-             for s, c, p in tratamentos] if args.aquecimento else []
-    medidas = [dict(software=s, comando=c, pipeline=p, repeticao=r, aquecimento=False)
-               for s, c, p in tratamentos for r in range(1, args.repeticoes + 1)]
+    trats = tratamentos(args.taxa_fixa)
+    aquec = [dict(t, repeticao=0, bloco=0, aquecimento=True) for t in trats] if args.aquecimento else []
     rng.shuffle(aquec)
-    rng.shuffle(medidas)
+    if args.ordem == "blocos":
+        medidas = []
+        for r in range(1, args.repeticoes + 1):
+            bloco = [dict(t, repeticao=r, bloco=r, aquecimento=False) for t in trats]
+            rng.shuffle(bloco)
+            medidas += bloco
+    else:
+        medidas = [dict(t, repeticao=r, bloco="", aquecimento=False)
+                   for t in trats for r in range(1, args.repeticoes + 1)]
+        rng.shuffle(medidas)
     plano = aquec + medidas
     for i, e in enumerate(plano, 1):
         e["ordem"] = i
@@ -312,6 +349,7 @@ def metadados(args: argparse.Namespace, plano: list[dict]) -> dict:
             "repeticoes": args.repeticoes, "duracao_s": args.duracao, "aquecimento": args.aquecimento,
             "threads": THREADS, "conexoes_por_thread": CONEXOES, "tamanho_valor_bytes": TAMANHO_VALOR,
             "chaves": CHAVES, "pipelines": PIPELINES, "comandos": COMANDOS,
+            "taxa_fixa_ops_s": args.taxa_fixa, "ordem": args.ordem,
             "cpus_servidor": args.cpus_servidor, "cpus_cliente": args.cpus_cliente,
         },
         "ambiente": {
@@ -326,9 +364,25 @@ def metadados(args: argparse.Namespace, plano: list[dict]) -> dict:
             "git_commit": ler(["git", "-C", str(RAIZ), "rev-parse", "HEAD"]),
         },
         "imagens": imagens,
-        "plano": [{k: e[k] for k in ("ordem", "software", "comando", "pipeline", "repeticao", "aquecimento")}
+        "plano": [{k: e[k] for k in ("ordem", "bloco", "software", "comando", "pipeline", "taxa",
+                                     "repeticao", "aquecimento")}
                   for e in plano],
     }
+
+
+def problemas_ambiente(amb: dict) -> list[str]:
+    """O que impede a coleta (ajuste A1 do piloto): fora da tomada ou CPU fora de `performance`.
+
+    So da para conferir no Linux (arquivos em /sys). Onde a informacao nao existe,
+    nada e acusado aqui: o aviso de "nao verificado" fica no main.
+    """
+    problemas = []
+    if amb.get("governador_cpu") and amb["governador_cpu"] != "performance":
+        problemas.append(f"governador de CPU '{amb['governador_cpu']}' (esperado: performance)")
+    tomada = amb.get("na_tomada") or {}
+    if tomada and not any(tomada.values()):
+        problemas.append("maquina fora da tomada (na bateria)")
+    return problemas
 
 
 def main() -> int:
@@ -342,14 +396,25 @@ def main() -> int:
     ap.add_argument("--sem-aquecimento", dest="aquecimento", action="store_false",
                     help="nao roda a execucao de aquecimento de cada tratamento")
     ap.add_argument("--tentativas", type=int, default=3, help="tentativas por execucao invalida")
+    ap.add_argument("--ordem", choices=["blocos", "sorteio"], default="blocos",
+                    help="blocos completos sorteados (padrao) ou sorteio livre (piloto)")
+    ap.add_argument("--taxa-fixa", type=int, default=TAXA_FIXA,
+                    help=f"ops/s no total da condicao de carga fixa (0 = sem essa condicao). "
+                         f"Multiplo de {THREADS * CONEXOES} (o limite e por conexao)")
+    ap.add_argument("--ignorar-ambiente", action="store_true",
+                    help="coleta mesmo fora da tomada ou sem o governador performance")
     ap.add_argument("--dry-run", action="store_true", help="so mostra o plano sorteado")
     args = ap.parse_args()
+    if args.taxa_fixa < 0 or args.taxa_fixa % (THREADS * CONEXOES):
+        ap.error(f"--taxa-fixa deve ser 0 ou multiplo de {THREADS * CONEXOES}")
 
     plano = montar_plano(args)
     if args.dry_run:
         for e in plano:
-            print(f"{e['ordem']:4d}  {e['software']:7s} {e['comando']} p={e['pipeline']:<3d} "
-                  f"rep={e['repeticao']:<3d}{' (aquecimento)' if e['aquecimento'] else ''}")
+            carga = f"{e['taxa']} ops/s" if e["taxa"] else "saturada"
+            print(f"{e['ordem']:4d}  bloco={e['bloco']!s:<3s} {e['software']:7s} {e['comando']} "
+                  f"p={e['pipeline']:<3d} {carga:<12s} rep={e['repeticao']:<3d}"
+                  f"{' (aquecimento)' if e['aquecimento'] else ''}")
         return 0
 
     dir_raw = RAIZ / "data" / "raw" / args.coleta
@@ -377,7 +442,16 @@ def main() -> int:
         if docker("image", "inspect", img, check=False).returncode != 0:
             log.info("baixando %s", img)
             docker("pull", img, timeout=900)
-    (dir_raw / "metadados.json").write_text(json.dumps(metadados(args, plano), indent=2, ensure_ascii=False))
+    meta = metadados(args, plano)
+    problemas = problemas_ambiente(meta["ambiente"])
+    if not meta["ambiente"]["governador_cpu"] and not meta["ambiente"]["na_tomada"]:
+        log.warning("nao foi possivel conferir tomada e governador de CPU (so no Linux): confira a mao")
+    if problemas and not args.ignorar_ambiente:
+        log.error("ambiente fora do protocolo: %s. Corrija (docs/05, D1) ou use --ignorar-ambiente.",
+                  "; ".join(problemas))
+        return 1
+    meta["verificacao_ambiente"] = {"problemas": problemas, "ignorado": bool(problemas)}
+    (dir_raw / "metadados.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
 
     total = len(plano)
     inicio = time.monotonic()
@@ -385,9 +459,11 @@ def main() -> int:
         w = csv.DictWriter(f, fieldnames=COLUNAS)
         w.writeheader()
         for e in plano:
+            carga = "-fixa" if e["taxa"] else ""
             for tentativa in range(1, args.tentativas + 1):
                 e = {**e, "tentativa": tentativa,
-                     "run_id": f"{e['ordem']:04d}-{e['software']}-{e['comando'].lower()}-p{e['pipeline']}-t{tentativa}"}
+                     "run_id": f"{e['ordem']:04d}-{e['software']}-{e['comando'].lower()}-p{e['pipeline']}"
+                               f"{carga}-t{tentativa}"}
                 linha = executar(e, args, dir_raw)
                 w.writerow(linha)
                 f.flush()
