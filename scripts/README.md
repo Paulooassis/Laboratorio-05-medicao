@@ -8,6 +8,7 @@
 | [`analise.py`](#analisepy-análise) | Estatística descritiva, gráficos e testes de hipótese | `requirements.txt` |
 | [`simulacao_poder.py`](#simulacao_poderpy-poder-e-erro-tipo-i) | Simula erro tipo I e poder com a variância do piloto | `requirements.txt` |
 | [`diagnostico_ordem.py`](#diagnostico_ordempy-deriva-temporal) | Verifica se o desempenho mudou ao longo da coleta (deriva, episódios de interferência) e aplica o critério de aceite | `requirements.txt` |
+| [`rodar_s02.sh`](#rodar_s02sh-s02-de-ponta-a-ponta) | Mini-piloto → portões → coleta completa → análise, num comando só | os acima |
 
 Fluxo completo (Linux/macOS; no Windows troque `python3` por `py`):
 
@@ -193,3 +194,22 @@ A ordem das execuções é sorteada para que uma interferência passageira (freq
 5. **Critério de aceite** (mini-piloto e coleta completa): **APROVADO** se nenhuma execução for sinalizada e nenhuma tendência de M1–M3, com todas as execuções juntas, tiver |ρ| > `--rho-max` e p < 0,05. A tendência por software é só informativa ([`docs/05`](../docs/05-revisao-piloto-tamanho-amostra.md#51-d1-deriva-temporal)).
 
 Nada é removido da análise principal. Gera em `results/<coleta>/`: `ordem_desvios.csv` (desvios e coluna `sinalizada`), `ordem.md` (critério de aceite, tendência, episódios e sensibilidade) e `ordem_desvios.png` (desvio × ordem, por métrica).
+
+---
+
+## `rodar_s02.sh`: S02 de ponta a ponta
+
+Para quem estiver com a máquina do estudo (na tomada, governador `performance`, sem uso durante a coleta):
+
+```bash
+bash scripts/rodar_s02.sh --so-minipiloto   # mini-piloto (~26 min) e os dois portões
+bash scripts/rodar_s02.sh                   # mini-piloto, portões e, se aprovados, coleta completa (~6 h no total)
+bash scripts/rodar_s02.sh --so-analise      # só a validação e a análise de uma coleta completa já feita
+```
+
+1. Roda o mini-piloto (`--repeticoes 3`). Um mini-piloto anterior é guardado com a data no nome.
+2. Confere os portões ([`docs/05`](../docs/05-revisao-piloto-tamanho-amostra.md#53-d3-tamanho-da-amostra)): `results/minipiloto/ordem.md` e `results/minipiloto/poder.md` precisam dar APROVADO. Se algum reprovar, mostra o motivo e **para antes da coleta completa**.
+3. Roda a coleta completa (`--repeticoes 50`).
+4. Valida e analisa a coleta completa (validação, diagnóstico de deriva, poder e `analise.py`) e mostra o que versionar.
+
+Argumentos extras vão para o `coleta_experimento.py` (por exemplo, `--cpus-servidor`/`--cpus-cliente` em outra topologia). A variável `PYTHON` troca o interpretador (padrão `python3`).
