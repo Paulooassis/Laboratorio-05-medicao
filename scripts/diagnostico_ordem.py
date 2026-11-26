@@ -78,6 +78,9 @@ def desvios(df: pd.DataFrame) -> pd.DataFrame:
     for m in METRICAS:
         med = df.groupby(TRATAMENTO)[m].transform("median")
         out[f"desvio_{m}_pct"] = 100 * (df[m] - med) / med
+    # Na carga fixa a vazao e imposta (a taxa), nao uma resposta: fica fora da tendencia e dos
+    # episodios, senao os desvios ~0 dessas execucoes diluem o rho e separam episodios vizinhos.
+    out.loc[out["taxa"] > 0, "desvio_ops_s_pct"] = np.nan
     return out.sort_values("ordem").reset_index(drop=True)
 
 
@@ -86,6 +89,7 @@ def tendencia(dv: pd.DataFrame) -> pd.DataFrame:
     for m, nome in METRICAS.items():
         col = f"desvio_{m}_pct"
         for grupo, g in [("Todos", dv), *[(s, dv[dv["software"] == s]) for s in SOFTWARES]]:
+            g = g.dropna(subset=[col])
             if len(g) < 3 or g[col].nunique() < 2:
                 rho, p = np.nan, np.nan
             else:
@@ -96,8 +100,12 @@ def tendencia(dv: pd.DataFrame) -> pd.DataFrame:
 
 
 def episodios(dv: pd.DataFrame, limiar: float) -> list[pd.DataFrame]:
-    """Agrupa execucoes sinalizadas que sao vizinhas na sequencia de execucoes validas."""
-    dv = dv.reset_index(drop=True)
+    """Agrupa execucoes sinalizadas que sao vizinhas na sequencia de execucoes validas.
+
+    So entram as execucoes com vazao como resposta (carga saturada): uma de carga fixa
+    no meio de um episodio nao o divide em dois.
+    """
+    dv = dv.dropna(subset=["desvio_ops_s_pct"]).reset_index(drop=True)
     sinal = dv["desvio_ops_s_pct"] <= -limiar
     blocos = (sinal != sinal.shift()).cumsum()
     return [g for _, g in dv[sinal].groupby(blocos[sinal])]

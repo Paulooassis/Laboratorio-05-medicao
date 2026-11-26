@@ -35,11 +35,13 @@ Sem a deriva, o CV de M1 e M2 cai de 8–12% para **2–5%**. Então o caminho �
 
 ### O que foi decidido
 
-1. **Protocolo de ambiente, agora conferido.** Coleta na tomada, governador `performance`, aplicativos fechados e máquina sem uso. O `coleta_experimento.py` lê `/sys` antes de começar e **não roda** se a máquina estiver na bateria ou com outro governador. Foi assim que o piloto rodou (`powersave`, na bateria). A opção `--ignorar-ambiente` existe para testes e fica registrada em `metadados.json` (`verificacao_ambiente`).
+1. **Protocolo de ambiente, agora conferido.** Coleta na tomada, governador `performance`, aplicativos fechados e máquina sem uso. O `coleta_experimento.py` lê `/sys` antes de começar (antes de baixar imagens) e **não roda** se a máquina estiver na bateria ou com outro governador. Só fontes do tipo `Mains` contam como tomada. Foi assim que o piloto rodou (`powersave`, na bateria). A opção `--ignorar-ambiente` existe para testes e fica registrada em `metadados.json` (`verificacao_ambiente`).
 2. **Ordem em blocos completos aleatorizados** (`--ordem blocos`, o novo padrão). O bloco *r* tem a repetição *r* de cada um dos 12 tratamentos, em ordem sorteada, e os blocos rodam em sequência (~6,5 min cada). Uma deriva lenta (bateria, temperatura) fica distribuída igualmente entre os tratamentos, e não só "em média", como no sorteio livre. No piloto, o sorteio livre pôs as três execuções afetadas no Redis e deixou as três últimas do Valkey no fim da coleta. O piloto continua reproduzível com `--ordem sorteio --taxa-fixa 0`. Um teste (`tests/test_coleta_plano.py`) confere que o plano gerado é igual ao de `data/raw/piloto/metadados.json`.
 3. **Critério de aceite da deriva**, calculado pelo `diagnostico_ordem.py` (seção "Critério de aceite" do `ordem.md`). A coleta é **APROVADA** se:
    - nenhuma execução tiver vazão 10% ou mais abaixo da mediana do seu tratamento; e
    - nenhuma tendência de M1–M3 ao longo da coleta, **com todas as execuções juntas**, tiver |ρ| > 0,3 **e** p < 0,05.
+
+   Na carga fixa, a vazão é imposta pela taxa, então essas execuções ficam fora da tendência e dos episódios de M1. Os desvios delas, quase nulos, diluiriam o ρ.
 
    Isso **revisa** o critério proposto no docs/04 ("nenhuma tendência com |ρ| > 0,3"). Com cerca de 20 execuções por software, |ρ| = 0,3 aparece por acaso: o limiar de significância para n = 20 é |ρ| ≈ 0,44, e são 9 correlações. Numa simulação (2.000 coletas do tamanho do mini-piloto, 36 execuções), o critério antigo reprova **79%** das coletas **sem deriva nenhuma**. O novo reprova 13% e ainda detecta 97% das coletas com deriva moderada. A tendência por software continua na tabela, mas só como informação.
 4. **Nada é removido da análise principal.** A sensibilidade (diferença com e sem as execuções sinalizadas) continua no `ordem.md` e entra nas ameaças à validade.
@@ -114,6 +116,6 @@ Com 3 execuções por tratamento, o CV do mini-piloto é uma estimativa grosseir
 | `validacao_dados.py` | Tratamento passa a incluir a `taxa`. Nova regra V10 (carga fixa fora de ±5% da taxa) |
 | `analise.py` | Condição = comando × *pipeline* × carga. Família de 18 testes, com H-5 só na carga fixa |
 | `diagnostico_ordem.py` | Seção "Critério de aceite" (APROVADO/REPROVADO), opção `--rho-max` |
-| `simulacao_poder.py` | n planejado = 50 (`--n-planejado`), α para 18 testes, grade de n até 100, tabela de cenários por CV (`poder_cenarios.csv`) e decisão sobre as hipóteses-alvo |
+| `simulacao_poder.py` | n planejado = 50 (`--n-planejado`), α e combinações simuladas iguais à família do `analise.py` (18 testes com carga fixa, 20 sem), grade de n até 100, tabela de cenários por CV (`poder_cenarios.csv`) e decisão sobre as hipóteses-alvo |
 
 Coletas sem a coluna `taxa`, como o piloto, são lidas como carga saturada. Por isso todos os scripts continuam rodando sobre os dados da S01.

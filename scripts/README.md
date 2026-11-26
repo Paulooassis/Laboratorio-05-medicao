@@ -91,7 +91,7 @@ python3 scripts/coleta_experimento.py --coleta x --repeticoes 50 --dry-run  # s�
 python3 scripts/coleta_experimento.py --coleta piloto --repeticoes 5 --ordem sorteio --taxa-fixa 0  # refaz o plano do piloto
 ```
 
-**Antes de começar**, o script confere em `/sys` (Linux) se a máquina está na tomada e com o governador de CPU `performance`. Se não estiver, ele para. Fora do Linux, só avisa que não conseguiu conferir.
+**Antes de começar** (antes de baixar imagens), o script confere em `/sys` (Linux) se a máquina está na tomada e com o governador de CPU `performance`. Se não estiver, ele para. Só contam como tomada as fontes do tipo `Mains`, porque a bateria de um mouse sem fio não vale. Se não conseguir ler alguma das duas informações, avisa qual.
 
 | Opção | Padrão | Significado |
 |---|---|---|
@@ -174,7 +174,7 @@ Lê só as execuções válidas e gera em `results/<coleta>/`:
 python3 scripts/simulacao_poder.py --coleta minipiloto [--replicas 2000] [--efeito 0.05] [--n-planejado 50]
 ```
 
-Reaproveita o Lab04: simula o Mann-Whitney com dados log-normais que têm o CV observado na coleta (o maior entre Redis e Valkey). Mede o erro tipo I (efeito 0, n planejado) e o poder para detectar 5% de diferença com n de 5 a 100, em α = 0,05 e em α = 0,05/18 = 0,0028 (pior caso do Holm). A tabela de **cenários** dá o poder numa grade de CVs, sem depender da coleta. A seção **Decisão** diz se o n planejado dá poder ≥ 0,8 nas hipóteses-alvo (H-1, H-2, H-4 e H-5; H-3 fica fora, ver [`docs/05`](../docs/05-revisao-piloto-tamanho-amostra.md#53-d3-tamanho-da-amostra)). Gera `erro_tipo1.csv`, `poder.csv`, `poder_cenarios.csv`, `poder.md` e `poder.png` em `results/<coleta>/`.
+Reaproveita o Lab04: simula o Mann-Whitney com dados log-normais que têm o CV observado na coleta (o maior entre Redis e Valkey). Mede o erro tipo I (efeito 0, n planejado) e o poder para detectar 5% de diferença com n de 5 a 100, em α = 0,05 e em α = 0,05/m, o pior caso do Holm. A família é a mesma do `analise.py`: m = 18 com carga fixa e m = 20 sem ela (piloto). Só entram as combinações que a análise testa. A tabela de **cenários** dá o poder numa grade de CVs, sem depender da coleta. A seção **Decisão** diz se o n planejado dá poder ≥ 0,8 nas hipóteses-alvo (H-1, H-2, H-4 e H-5; H-3 fica fora, ver [`docs/05`](../docs/05-revisao-piloto-tamanho-amostra.md#53-d3-tamanho-da-amostra)). Gera `erro_tipo1.csv`, `poder.csv`, `poder_cenarios.csv`, `poder.md` e `poder.png` em `results/<coleta>/`.
 
 ---
 
@@ -190,6 +190,6 @@ A ordem das execuções é sorteada para que uma interferência passageira (freq
 2. **Tendência:** correlação de Spearman entre a ordem de execução e o desvio, em todas as execuções e por software;
 3. **Episódios:** execuções com vazão pelo menos `--limiar`% (padrão 10%) abaixo da mediana do tratamento; vizinhas na sequência formam um episódio;
 4. **Sensibilidade:** diferença % das medianas (Valkey × Redis) por condição, com todas as execuções e sem as sinalizadas;
-5. **Critério de aceite** (mini-piloto e coleta completa): **APROVADO** se nenhuma execução for sinalizada e nenhuma tendência de M1–M3, com todas as execuções juntas, tiver |ρ| > `--rho-max` e p < 0,05. A tendência por software é só informativa ([`docs/05`](../docs/05-revisao-piloto-tamanho-amostra.md#51-d1-deriva-temporal)).
+5. **Critério de aceite** (mini-piloto e coleta completa): **APROVADO** se nenhuma execução for sinalizada e nenhuma tendência de M1–M3, com todas as execuções juntas, tiver |ρ| > `--rho-max` e p < 0,05. A tendência por software é só informativa. Na carga fixa, a vazão é imposta, então essas execuções ficam fora da tendência e dos episódios de M1 ([`docs/05`](../docs/05-revisao-piloto-tamanho-amostra.md#51-d1-deriva-temporal)).
 
 Nada é removido da análise principal. Gera em `results/<coleta>/`: `ordem_desvios.csv` (desvios e coluna `sinalizada`), `ordem.md` (critério de aceite, tendência, episódios e sensibilidade) e `ordem_desvios.png` (desvio × ordem, por métrica).

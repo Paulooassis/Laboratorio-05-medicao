@@ -84,3 +84,31 @@ def test_sorteio_livre_reproduz_o_plano_do_piloto():
 ])
 def test_problemas_ambiente(amb, n_problemas):
     assert len(coleta.problemas_ambiente(amb)) == n_problemas
+
+
+def sys_falso(raiz: Path, governador: str, fontes: dict[str, tuple[str, str]]) -> Path:
+    """Monta um /sys minimo: governador e fontes de energia {nome: (type, online)}."""
+    gov = raiz / "devices/system/cpu/cpu0/cpufreq/scaling_governor"
+    gov.parent.mkdir(parents=True)
+    gov.write_text(governador + "\n")
+    for nome, (tipo, online) in fontes.items():
+        d = raiz / "class/power_supply" / nome
+        d.mkdir(parents=True)
+        (d / "type").write_text(tipo + "\n")
+        (d / "online").write_text(online + "\n")
+    return raiz
+
+
+def test_energia_so_conta_carregador(tmp_path):
+    """Na bateria, um mouse sem fio com `online` = 1 nao pode fazer parecer que esta na tomada."""
+    amb = coleta.energia(sys_falso(tmp_path, "performance",
+                                   {"AC": ("Mains", "0"), "hidpp_battery_0": ("Battery", "1")}))
+    assert amb["governador_cpu"] == "performance"
+    assert amb["na_tomada"] == {"AC": False}
+    assert coleta.problemas_ambiente(amb) == ["maquina fora da tomada (na bateria)"]
+
+
+def test_energia_na_tomada(tmp_path):
+    amb = coleta.energia(sys_falso(tmp_path, "performance", {"ADP1": ("Mains", "1"), "BAT0": ("Battery", "0")}))
+    assert amb["na_tomada"] == {"ADP1": True}
+    assert coleta.problemas_ambiente(amb) == []

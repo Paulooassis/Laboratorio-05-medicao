@@ -259,6 +259,27 @@ def test_criterio_ignora_tendencia_so_de_um_software():
     assert not aprovado and len(falhas) == 1 and "M2 Latência p50 (Todos)" in falhas[0]
 
 
+def test_carga_fixa_fica_fora_da_tendencia_e_dos_episodios_de_vazao():
+    df = com_carga_fixa(dados_sinteticos(n=5), n=5)
+    dv = diag.desvios(df)
+    assert dv.loc[dv["taxa"] > 0, "desvio_ops_s_pct"].isna().all()
+    assert dv.loc[dv["taxa"] == 0, "desvio_ops_s_pct"].notna().all()
+    tend = diag.tendencia(dv)
+    vazao = tend[(tend["metrica"] == "M1 Vazão") & (tend["grupo"] == "Todos")].iloc[0]
+    assert vazao["n"] == 40  # so as execucoes saturadas
+
+
+def test_carga_fixa_no_meio_nao_divide_o_episodio():
+    df = com_carga_fixa(dados_sinteticos(n=5), n=5)
+    df["ordem"] = range(1, len(df) + 1)
+    fixa = df.index[df["taxa"] > 0][0]
+    saturadas = df.index[df["taxa"] == 0][:2]
+    df.loc[[saturadas[0], fixa, saturadas[1]], "ordem"] = [101, 102, 103]  # saturada, fixa, saturada
+    df.loc[saturadas, "ops_s"] *= 0.8
+    eps = diag.episodios(diag.desvios(df), limiar=10)
+    assert [list(g["ordem"]) for g in eps] == [[101, 103]]
+
+
 def test_tendencia_detecta_deriva_crescente():
     # A ordem precisa ser sorteada, como no coletor: se cada tratamento rodasse em bloco,
     # a mediana do tratamento absorveria a deriva e nao haveria o que detectar.

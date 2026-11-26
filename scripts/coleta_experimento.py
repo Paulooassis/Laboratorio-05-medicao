@@ -322,13 +322,29 @@ def ler(cmd: list[str]) -> str:
         return ""
 
 
-def metadados(args: argparse.Namespace, plano: list[dict]) -> dict:
-    def ler_arquivo(caminho: str) -> str:
-        try:
-            return Path(caminho).read_text().strip()
-        except OSError:
-            return ""
+def ler_arquivo(caminho: str | Path) -> str:
+    try:
+        return Path(caminho).read_text().strip()
+    except OSError:
+        return ""
 
+
+def energia(sys_dir: Path = Path("/sys")) -> dict:
+    """Governador de CPU, perfil de energia e fontes de energia da rede eletrica (Linux).
+
+    So contam as fontes do tipo "Mains" (carregador): baterias de mouse, teclado ou
+    nobreak USB tambem tem `online` e fariam um notebook na bateria parecer na tomada.
+    """
+    return {
+        "governador_cpu": ler_arquivo(sys_dir / "devices/system/cpu/cpu0/cpufreq/scaling_governor"),
+        "perfil_energia": ler_arquivo(sys_dir / "firmware/acpi/platform_profile"),
+        "na_tomada": {p.parent.name: ler_arquivo(p) == "1"
+                      for p in (sys_dir / "class/power_supply").glob("*/online")
+                      if ler_arquivo(p.parent / "type") == "Mains"},
+    }
+
+
+def metadados(args: argparse.Namespace, plano: list[dict]) -> dict:
     cpu_modelo = ""
     for linha in ler_arquivo("/proc/cpuinfo").splitlines():
         if linha.startswith("model name"):
@@ -355,10 +371,7 @@ def metadados(args: argparse.Namespace, plano: list[dict]) -> dict:
         "ambiente": {
             "so": platform.platform(), "python": platform.python_version(),
             "cpu": cpu_modelo, "cpus_logicas": os.cpu_count(), "ram": ram,
-            "governador_cpu": ler_arquivo("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"),
-            "perfil_energia": ler_arquivo("/sys/firmware/acpi/platform_profile"),
-            "na_tomada": {p.parent.name: ler_arquivo(str(p)) == "1"
-                          for p in Path("/sys/class/power_supply").glob("*/online")},
+            **energia(),
             "docker": ler(["docker", "version", "--format", "{{.Server.Version}}"]),
             "memtier": ler(["docker", "run", "--rm", IMAGEM_MEMTIER, "--version"]).splitlines()[:1],
             "git_commit": ler(["git", "-C", str(RAIZ), "rev-parse", "HEAD"]),
@@ -437,19 +450,24 @@ def main() -> int:
 
     signal.signal(signal.SIGINT, encerrar)
 
+    # Ambiente (A1 do piloto) antes de rede, imagens e metadados: so le /sys, e rapido
+    amb = energia()
+    problemas = problemas_ambiente(amb)
+    if not amb["governador_cpu"]:
+        log.warning("nao foi possivel ler o governador de CPU (so no Linux com cpufreq): confira a mao")
+    if not amb["na_tomada"]:
+        log.warning("nao foi possivel conferir se a maquina esta na tomada (so no Linux): confira a mao")
+    if problemas and not args.ignorar_ambiente:
+        log.error("ambiente fora do protocolo: %s. Corrija (docs/05, D1) ou use --ignorar-ambiente.",
+                  "; ".join(problemas))
+        return 1
+
     garantir_rede()
     for img in [s["imagem"] for s in SOFTWARES.values()] + [IMAGEM_MEMTIER]:
         if docker("image", "inspect", img, check=False).returncode != 0:
             log.info("baixando %s", img)
             docker("pull", img, timeout=900)
     meta = metadados(args, plano)
-    problemas = problemas_ambiente(meta["ambiente"])
-    if not meta["ambiente"]["governador_cpu"] and not meta["ambiente"]["na_tomada"]:
-        log.warning("nao foi possivel conferir tomada e governador de CPU (so no Linux): confira a mao")
-    if problemas and not args.ignorar_ambiente:
-        log.error("ambiente fora do protocolo: %s. Corrija (docs/05, D1) ou use --ignorar-ambiente.",
-                  "; ".join(problemas))
-        return 1
     meta["verificacao_ambiente"] = {"problemas": problemas, "ignorado": bool(problemas)}
     (dir_raw / "metadados.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
 

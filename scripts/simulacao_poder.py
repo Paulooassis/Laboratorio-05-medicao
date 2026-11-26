@@ -11,8 +11,10 @@ o outro mediana 1 + efeito.
 - Erro tipo I: efeito = 0, n = 30, alfa = 0,05 -> taxa de rejeicao deve ficar
   perto de 0,05.
 - Poder: efeito = 5% (diferenca minima relevante do plano), n em 5..100, com
-  alfa = 0,05 (nominal) e alfa = 0,05/18 = 0,0028 (pior caso do Holm com os
-  18 testes da S02, equivalente a Bonferroni).
+  alfa = 0,05 (nominal) e alfa = 0,05/m (pior caso do Holm, equivalente a
+  Bonferroni). A familia e a mesma do analise.py (analise.metricas_testadas):
+  m = 18 com carga fixa (S02) e m = 20 sem ela (piloto). So as combinacoes
+  metrica x condicao que o analise.py testa entram na simulacao.
 - Cenarios: o mesmo poder numa grade de CVs, sem depender da coleta. Diz ate
   que CV o n planejado ainda da poder >= 0,8.
 
@@ -44,6 +46,8 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from scipy import stats  # noqa: E402
 
+from analise import metricas_testadas  # noqa: E402  (mesma familia de testes da analise)
+
 RAIZ = Path(__file__).resolve().parent.parent
 METRICAS = {
     "ops_s": "M1 Vazão",
@@ -55,7 +59,6 @@ METRICAS = {
 N_GRADE = [5, 10, 15, 20, 30, 40, 50, 60, 80, 100]
 CV_GRADE = [0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.10]
 ALFA = 0.05
-N_TESTES = 18  # familia do Holm na S02: M1-M4 x 4 condicoes saturadas + M5 x 2 de carga fixa (analise.py)
 N_PLANEJADO = 50
 ALVO = ["M1 Vazão", "M2 Latência p50", "M4 Memória", "M5 CPU"]  # H-3 (p99) fica fora: ver docstring
 PODER_MIN = 0.8
@@ -78,15 +81,6 @@ def com_taxa(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def alvo(metrica: str, taxa: int, tem_carga_fixa: bool) -> bool:
-    """A combinacao metrica x condicao entra na decisao do n? (mesma familia do analise.py)"""
-    if taxa:
-        return metrica == "M5 CPU"
-    if metrica == "M5 CPU":
-        return not tem_carga_fixa  # na carga saturada a CPU fica no teto (docs/05, D2)
-    return metrica in ALVO
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--coleta", default="piloto")
@@ -96,7 +90,6 @@ def main() -> int:
     args = ap.parse_args()
     n_plan = args.n_planejado
     n_grade = sorted(set(N_GRADE) | {n_plan})
-    alfa_holm = ALFA / N_TESTES
 
     entrada = RAIZ / "data" / "processed" / f"{args.coleta}_validado.csv"
     if not entrada.exists():
@@ -112,14 +105,15 @@ def main() -> int:
     # CV por metrica x condicao (maior CV entre os dois softwares)
     cvs = []
     for (cmd, pipe, taxa), g in df.groupby(["comando", "pipeline", "taxa"]):
-        for m, nome in METRICAS.items():
-            if taxa and m == "ops_s":
-                continue  # na carga fixa a vazao e a propria taxa, nao uma resposta
+        for m in metricas_testadas(taxa, tem_carga_fixa):
+            nome = METRICAS[m]
             cv_sw = g.groupby("software")[m].agg(lambda x: x.std(ddof=1) / x.mean())
             cvs.append(dict(metrica=nome, coluna=m, comando=cmd, pipeline=pipe, taxa=taxa,
-                            alvo=alvo(nome, taxa, tem_carga_fixa), cv_redis=cv_sw.get("Redis", np.nan), cv_valkey=cv_sw.get("Valkey", np.nan),
+                            alvo=nome in ALVO, cv_redis=cv_sw.get("Redis", np.nan), cv_valkey=cv_sw.get("Valkey", np.nan),
                             cv=float(cv_sw.max())))
     cvs = pd.DataFrame(cvs)
+    n_testes = len(cvs)  # uma linha por teste da familia do Holm
+    alfa_holm = ALFA / n_testes
 
     # Erro tipo I (efeito 0) com n planejado
     erro1 = []
@@ -172,7 +166,7 @@ def main() -> int:
     linhas = [f"# Simulação de poder e erro tipo I: coleta `{args.coleta}`", "",
               f"Mann-Whitney U bilateral, dados log-normais com o maior CV observado entre Redis e Valkey, "
               f"{args.replicas} réplicas por cenário, efeito = {100 * args.efeito:.0f}% na mediana. "
-              f"α corrigido = 0,05 / {N_TESTES} = {a_txt} (pior caso do Holm).", "",
+              f"α corrigido = 0,05 / {n_testes} = {a_txt} (pior caso do Holm).", "",
               f"## Erro tipo I (H0 verdadeira, n = {n_plan}, α = 0,05)", "",
               f"Taxa de rejeição: mínima {erro1['taxa_rejeicao_h0_verdadeira'].min():.3f}, "
               f"média {erro1['taxa_rejeicao_h0_verdadeira'].mean():.3f}, "
@@ -199,7 +193,7 @@ def main() -> int:
     fora = resumo[~resumo["alvo"] & (resumo["poder_nplan"] < PODER_MIN)]
     linhas += ["", "## Decisão", ""]
     if insuf.empty:
-        linhas.append(f"**APROVADO:** com α corrigido para {N_TESTES} testes, n = {n_plan} dá poder ≥ {p_txt} "
+        linhas.append(f"**APROVADO:** com α corrigido para {n_testes} testes, n = {n_plan} dá poder ≥ {p_txt} "
                       f"em todas as hipóteses-alvo. **Mantém-se n = {n_plan} por tratamento.**")
     else:
         linhas.append(f"**REPROVADO:** {len(insuf)} combinação(ões) alvo ficam com poder < {p_txt} em "
