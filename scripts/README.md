@@ -6,6 +6,7 @@
 | [`coleta_experimento.py`](#coleta_experimentopy-execuções-do-experimento) | Roda as execuções do experimento Redis × Valkey | biblioteca padrão + Docker |
 | [`validacao_dados.py`](#validacao_dadospy-validação-dos-dados) | Valida os dados coletados (nulos, duplicados, fora do esperado) | `requirements.txt` |
 | [`analise.py`](#analisepy-análise) | Estatística descritiva, gráficos e testes de hipótese | `requirements.txt` |
+| [`interacao.py`](#interacaopy-interação-software--pipeline-h-6) | Testa a interação software × *pipeline* (H-6) com ANOVA 2×2 ou ART | `requirements.txt` |
 | [`simulacao_poder.py`](#simulacao_poderpy-poder-e-erro-tipo-i) | Simula erro tipo I e poder com a variância do piloto | `requirements.txt` |
 | [`diagnostico_ordem.py`](#diagnostico_ordempy-deriva-temporal) | Verifica se o desempenho mudou ao longo da coleta (deriva, episódios de interferência) e aplica o critério de aceite | `requirements.txt` |
 
@@ -18,7 +19,10 @@ python3 scripts/validacao_dados.py   --coleta piloto
 python3 scripts/analise.py           --coleta piloto
 python3 scripts/simulacao_poder.py   --coleta piloto
 python3 scripts/diagnostico_ordem.py --coleta piloto
+python3 scripts/interacao.py         --coleta piloto
 ```
+
+Coleta completa da S02 (mini-piloto, portão e coleta): [`docs/06`](../docs/06-coleta-completa-analise.md#61-tarefa-12-procedimento-da-coleta-completa).
 
 As regras de validação e as funções estatísticas têm testes em [`tests/`](../tests/): `pip install -r requirements-dev.txt` e `python3 -m pytest`.
 
@@ -149,7 +153,7 @@ Uma execução é **descartada** se violar qualquer regra:
 
 O tratamento inclui a carga (`taxa`). Coletas sem essa coluna (piloto) são lidas como carga saturada. *Outliers* (fora de Q1 − 1,5·IQR / Q3 + 1,5·IQR dentro do tratamento) **não são removidos**, só sinalizados na coluna `outliers`.
 
-Saída: `data/processed/<coleta>_validado.csv` (todas as linhas + `valido`, `motivo_descarte`, `outliers`) e o resumo em `results/<coleta>/validacao.md` e `.json` (total, válidas, descartadas, motivos, válidas por tratamento).
+Saída: `data/processed/<coleta>_validado.csv` (todas as linhas + `valido`, `motivo_descarte`, `outliers`) e o resumo em `results/<coleta>/validacao.md` e `.json` (total, válidas, descartadas, motivos, válidas por tratamento e a lista de cada execução descartada por problema, com o motivo).
 
 ---
 
@@ -164,7 +168,18 @@ Lê só as execuções válidas e gera em `results/<coleta>/`:
 - `descritiva.csv` / `.md`: n, média, mediana, DP, CV, mín, máx, Q1, Q3, IQR e IC 95% da mediana (*bootstrap*, 10.000 reamostragens) por tratamento e métrica;
 - `testes.csv` / `.md`: Shapiro-Wilk em cada grupo → t de Welch ou Mann-Whitney U, g de Hedges ou δ de Cliff, diferença % das medianas e p ajustado por Holm-Bonferroni. Com carga fixa, a família tem 18 testes: M1–M4 nas 4 condições saturadas e M5 só na carga fixa. Sem ela (piloto), são 20 testes (M1–M5 × 4);
 - `boxplot_<métrica>.png`: *boxplot* com os pontos, por condição;
-- `interacao_vazao.png`: gráfico de interação software × *pipeline* (H-6).
+- `ecdf_lat_p50_ms.png` e `ecdf_lat_p99_ms.png`: ECDF das latências por execução, uma curva por software, em cada condição;
+- `interacao_vazao.png`: gráfico de interação software × *pipeline* (o teste de H-6 fica no `interacao.py`).
+
+---
+
+## `interacao.py`: interação software × *pipeline* (H-6)
+
+```bash
+python3 scripts/interacao.py --coleta completa [--bootstrap 10000]
+```
+
+Só usa a carga saturada. Para M1 (H-6) e, de forma exploratória, M2 e M3, em cada comando: ANOVA 2×2 tipo III, ou ART ANOVA se os resíduos não forem normais (Shapiro-Wilk); η² parcial; diferença % Valkey − Redis em cada *pipeline* e a diferença das diferenças (p.p.), com IC 95% por *bootstrap*; Holm dentro de cada métrica. A conclusão só diz "irrelevante na prática" se o IC da diferença das diferenças ficar inteiro dentro de ±5 p.p. Gera `interacao.md` / `.csv` e `interacao_<métrica>.png` em `results/<coleta>/`. Detalhes: [`docs/06`](../docs/06-coleta-completa-analise.md#64-tarefa-14c-interação-software--pipeline-h-6).
 
 ---
 
