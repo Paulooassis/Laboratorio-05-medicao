@@ -8,7 +8,7 @@ Laboratório de Experimentação de Software · Engenharia de Software · PUC Mi
 |---|---|
 | Repositório | https://github.com/Paulooassis/Laboratorio-05-medicao |
 | GitHub Projects (Kanban) | https://github.com/users/Paulooassis/projects/6 |
-| Sprint atual | **Lab05S01: proposta + coleta piloto** |
+| Sprint atual | **Lab05S02: coleta completa e análise** |
 
 ---
 
@@ -138,7 +138,10 @@ python3 scripts/diagnostico_ordem.py --coleta piloto                 # deriva ao
 # S02: mini-piloto (portão) e coleta completa (docs/05, seção 5.3)
 python3 scripts/coleta_experimento.py --coleta minipiloto --repeticoes 3   # ~26 min
 python3 scripts/coleta_experimento.py --coleta completa   --repeticoes 50  # ~5 h 35 min
+python3 scripts/interacao.py         --coleta completa                   # H-6 (interação com o pipeline)
 ```
+
+Procedimento completo da S02 (portões, validação e análise): [docs/06](docs/06-coleta-completa-analise.md).
 
 **Testes** (regras de validação e funções estatísticas):
 
@@ -152,7 +155,7 @@ No Windows, troque `python3` por `py`. Ajuste `--cpus-servidor` e `--cpus-client
 ## Estrutura do repositório
 
 ```
-docs/                     proposta, piloto e revisão do piloto (tamanho da amostra)
+docs/                     proposta, piloto, revisão do piloto, coleta completa e análise
 scripts/                  coleta, validação, análise e simulação (ver scripts/README.md)
 tests/                    testes automatizados da validação e da análise (pytest)
 data/impacto/             evidências públicas de impacto (CSV/JSON com fonte e data)

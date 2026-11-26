@@ -5,8 +5,9 @@ Segue o plano de analise (docs/03-metricas-hipoteses-planos.md, secao 3.5):
 1. Estatistica descritiva por tratamento (software x comando x pipeline x carga) para
    M1-M5: n, media, mediana, desvio padrao, CV, min, max, Q1, Q3, IQR e IC 95%
    da mediana por bootstrap (10.000 reamostragens).
-2. Graficos: boxplot (com os pontos) de cada metrica por condicao e grafico de
-   interacao software x pipeline para a vazao.
+2. Graficos: boxplot (com os pontos) de cada metrica por condicao, ECDF das
+   latencias p50 e p99 por condicao e grafico de interacao software x pipeline
+   para a vazao (o teste da interacao, H-6, fica no interacao.py).
 3. Testes por condicao (Redis x Valkey): Shapiro-Wilk em cada grupo -> t de Welch
    (os dois normais) ou Mann-Whitney U (bilateral); tamanho do efeito (g de Hedges
    ou delta de Cliff); diferenca percentual das medianas; p ajustado por
@@ -22,7 +23,7 @@ o script e ver a ordem de grandeza dos efeitos, nao para concluir.
 
 Saidas em results/<coleta>/:
   descritiva.csv / descritiva.md, testes.csv / testes.md,
-  boxplot_<metrica>.png, interacao_vazao.png
+  boxplot_<metrica>.png, ecdf_lat_p50_ms.png, ecdf_lat_p99_ms.png, interacao_vazao.png
 
 Uso:
     python3 scripts/analise.py --coleta piloto
@@ -198,6 +199,29 @@ def graficos(df: pd.DataFrame, saida: Path) -> list[Path]:
                      fontsize=11)
         fig.tight_layout()
         arq = saida / f"boxplot_{m}.png"
+        fig.savefig(arq, dpi=130)
+        plt.close(fig)
+        arquivos.append(arq)
+
+    # ECDF das latencias por execucao (p50 e p99), uma curva por software, em cada condicao
+    for m in ["lat_p50_ms", "lat_p99_ms"]:
+        mid, nome, unid = METRICAS[m]
+        fig, eixos = plt.subplots(1, len(condicoes), figsize=(3.2 * len(condicoes), 3.4), sharey=True)
+        for ax, (cmd, pipe, taxa) in zip(np.atleast_1d(eixos), condicoes):
+            g = df[(df["comando"] == cmd) & (df["pipeline"] == pipe) & (df["taxa"] == taxa)]
+            for s in SOFTWARES:
+                x = np.sort(g.loc[g["software"] == s, m].to_numpy(dtype=float))
+                if len(x):
+                    ax.step(np.r_[x[0], x], np.r_[0, np.arange(1, len(x) + 1) / len(x)], where="post",
+                            color=CORES[s], label=s)
+            ax.set_title(f"{cmd} · pipeline {pipe}" + (f"\n{rotulo_carga(taxa)}" if taxa else ""), fontsize=10)
+            ax.set_xlabel(f"{nome} ({unid})")
+            ax.grid(alpha=0.3)
+        np.atleast_1d(eixos)[0].set_ylabel("Proporção das execuções")
+        np.atleast_1d(eixos)[0].legend(fontsize=8)
+        fig.suptitle(f"{mid} · ECDF de {nome} por condição", fontsize=11)
+        fig.tight_layout()
+        arq = saida / f"ecdf_{m}.png"
         fig.savefig(arq, dpi=130)
         plt.close(fig)
         arquivos.append(arq)

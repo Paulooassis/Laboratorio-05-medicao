@@ -10,7 +10,7 @@ import io
 import pandas as pd
 import pytest
 
-from validacao_dados import n_cpus, resumo, validar
+from validacao_dados import em_markdown, n_cpus, resumo, validar
 
 META = {"coleta": "teste", "parametros": {"cpus_servidor": "0,4", "duracao_s": 30, "repeticoes": 1}}
 
@@ -186,6 +186,25 @@ def test_resumo_conta_descartes_e_tratamentos_incompletos():
     assert r["descartados_exceto_aquecimento"] == 1
     assert r["motivos_descarte"] == {"V2 aquecimento": 1, "V1 status != ok": 1}
     assert r["tratamentos_incompletos"] == []  # o Valkey nao tem nenhuma valida, entao nem aparece
+
+
+def test_resumo_lista_cada_descarte_com_motivo_sem_o_aquecimento():
+    df = como_csv(
+        execucao(run_id="aq", aquecimento=True, repeticao=0),
+        execucao(run_id="ok"),
+        execucao(run_id="erro", repeticao=2, status="erro"),
+    )
+    r = resumo(validar(df, META), META)
+    assert r["descartados_detalhe"] == [{"run_id": "erro", "motivo_descarte": "V1 status != ok"}]
+    md = em_markdown(r)
+    assert "| `erro` | V1 status != ok |" in md
+    assert "`aq`" not in md.split("## Execucoes descartadas por problema")[1].split("##")[0]
+
+
+def test_markdown_diz_nenhuma_quando_nao_ha_descarte():
+    r = resumo(validar(como_csv(execucao()), META), META)
+    assert r["descartados_detalhe"] == []
+    assert "Nenhuma." in em_markdown(r)
 
 
 def test_resumo_aponta_tratamento_com_menos_repeticoes():

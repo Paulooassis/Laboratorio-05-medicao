@@ -128,6 +128,8 @@ def resumo(df: pd.DataFrame, meta: dict) -> dict:
         "tratamentos_incompletos": por_trat[por_trat["validas"] < (esperado or 0)].to_dict(orient="records"),
         "outliers_sinalizados": int((validas["outliers"] != "").sum()),
         "outliers_detalhe": validas.loc[validas["outliers"] != "", ["run_id", "outliers"]].to_dict(orient="records"),
+        "descartados_detalhe": df.loc[~df["valido"] & ~df["aquecimento"],
+                                      ["run_id", "motivo_descarte"]].to_dict(orient="records"),
     }
 
 
@@ -148,6 +150,14 @@ def em_markdown(r: dict) -> str:
     linhas += [f"| {t['software']} | {t['comando']} | {t['pipeline']} | "
                f"{str(t['taxa']) + ' ops/s' if t['taxa'] else 'saturada'} | {t['validas']} |"
                for t in r["validas_por_tratamento"]]
+    linhas += ["", "## Execucoes descartadas por problema (exceto aquecimento)", ""]
+    if r.get("descartados_detalhe"):
+        linhas += ["| Execucao | Motivo |", "|---|---|"]
+        linhas += [f"| `{d['run_id']}` | {d['motivo_descarte']} |" for d in r["descartados_detalhe"]]
+        linhas += ["", "Cada execucao invalida e repetida pelo coletor (`--tentativas`); a tentativa valida "
+                   "fica no CSV com o mesmo tratamento e repeticao."]
+    else:
+        linhas.append("Nenhuma.")
     if r["outliers_detalhe"]:
         linhas += ["", "## Outliers sinalizados", "", "| Execucao | Metricas |", "|---|---|"]
         linhas += [f"| `{o['run_id']}` | {o['outliers']} |" for o in r["outliers_detalhe"]]
