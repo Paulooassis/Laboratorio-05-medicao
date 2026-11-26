@@ -181,6 +181,14 @@ def test_descritiva_separa_carga_fixa_e_saturada():
     assert len(desc) == 12 * len(analise.METRICAS)  # 8 tratamentos saturados + 4 de carga fixa
 
 
+def test_graficos_geram_boxplot_ecdf_e_interacao(tmp_path):
+    arquivos = analise.graficos(com_carga_fixa(dados_sinteticos(), n=6), tmp_path)
+    nomes = {a.name for a in arquivos}
+    assert {f"boxplot_{m}.png" for m in analise.METRICAS} <= nomes
+    assert {"ecdf_lat_p50_ms.png", "ecdf_lat_p99_ms.png", "interacao_vazao.png"} <= nomes
+    assert all(a.stat().st_size > 0 for a in arquivos)
+
+
 def test_testes_escolhe_mann_whitney_quando_nao_e_normal():
     df = dados_sinteticos(n=30)
     assimetrica = (df["software"] == "Redis") & (df["comando"] == "GET") & (df["pipeline"] == 1)
