@@ -14,6 +14,10 @@ Regras de validacao (uma execucao e DESCARTADA se violar qualquer uma):
   V7  versao reportada pelo servidor diferente da versao do tratamento
   V8  GET com misses > 0 (a base nao foi populada corretamente)
   V9  menos amostras de CPU que metade da janela esperada
+  V10 carga fixa (taxa > 0) com vazao fora de +-5% da taxa: a carga nao foi a
+      planejada e a CPU deixa de ser comparavel entre os softwares
+
+Coletas sem a coluna `taxa` (piloto) sao lidas como carga saturada (taxa 0).
 
 Outliers NAO sao removidos (regra do plano de coleta): valores fora de
 [Q1 - 1,5*IQR, Q3 + 1,5*IQR] dentro de cada tratamento sao apenas sinalizados na
@@ -39,7 +43,8 @@ import pandas as pd
 
 RAIZ = Path(__file__).resolve().parent.parent
 METRICAS = ["ops_s", "lat_p50_ms", "lat_p99_ms", "mem_rss_mib", "cpu_medio_pct"]
-TRATAMENTO = ["software", "comando", "pipeline"]
+TRATAMENTO = ["software", "comando", "pipeline", "taxa"]
+TOLERANCIA_TAXA = 0.05
 
 
 def n_cpus(cpuset: str) -> int:
@@ -59,6 +64,7 @@ def validar(df: pd.DataFrame, meta: dict) -> pd.DataFrame:
     min_amostras = max(1, (params.get("duracao_s", 30) - 2) // 2)
 
     df = df.copy()
+    df["taxa"] = df["taxa"].fillna(0).astype(int) if "taxa" in df else 0
     df["aquecimento"] = df["aquecimento"].astype(str).str.lower() == "true"
     motivos: list[list[str]] = [[] for _ in range(len(df))]
 
@@ -79,6 +85,8 @@ def validar(df: pd.DataFrame, meta: dict) -> pd.DataFrame:
     marcar(df["versao_reportada"].astype(str) != df["versao"].astype(str), "V7 versao divergente")
     marcar((df["comando"] == "GET") & (df["misses_s"].fillna(0) > 0), "V8 GET com misses")
     marcar(df["cpu_amostras"].fillna(0) < min_amostras, "V9 poucas amostras de CPU")
+    marcar((df["taxa"] > 0) & ((df["ops_s"] / df["taxa"] - 1).abs() > TOLERANCIA_TAXA),
+           "V10 carga fixa fora da taxa")
 
     df["motivo_descarte"] = ["; ".join(m) for m in motivos]
     df["valido"] = df["motivo_descarte"] == ""
@@ -136,8 +144,9 @@ def em_markdown(r: dict) -> str:
     ]
     linhas += [f"- {k}: {v}" for k, v in r["motivos_descarte"].items()] or ["- nenhum"]
     linhas += ["", f"## Execucoes validas por tratamento (esperado: {r['repeticoes_esperadas_por_tratamento']})", "",
-               "| Software | Comando | Pipeline | Validas |", "|---|---|---|---|"]
-    linhas += [f"| {t['software']} | {t['comando']} | {t['pipeline']} | {t['validas']} |"
+               "| Software | Comando | Pipeline | Carga | Validas |", "|---|---|---|---|---|"]
+    linhas += [f"| {t['software']} | {t['comando']} | {t['pipeline']} | "
+               f"{str(t['taxa']) + ' ops/s' if t['taxa'] else 'saturada'} | {t['validas']} |"
                for t in r["validas_por_tratamento"]]
     if r["outliers_detalhe"]:
         linhas += ["", "## Outliers sinalizados", "", "| Execucao | Metricas |", "|---|---|"]

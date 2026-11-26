@@ -87,6 +87,8 @@ O `scripts/diagnostico_ordem.py` mede o desvio de cada execução em relação �
 
 **Leitura:** a aleatorização funcionou como esperado (a interferência não se concentrou num tratamento de forma sistemática), mas com n = 5 três execuções ruins bastam para mover a diferença em vazão e latência para perto do limiar de 5%. Isso reforça o ajuste A1. No mini-piloto da S02, o critério de aceite passa a incluir: **nenhuma execução sinalizada pelo `diagnostico_ordem.py` e nenhuma tendência com |ρ| > 0,3 em M1–M3**.
 
+> **Revisado na S02** ([docs/05, D1](05-revisao-piloto-tamanho-amostra.md#51-d1-deriva-temporal)): a tendência só reprova se |ρ| > 0,3 **e** p < 0,05 com todas as execuções juntas. O critério acima reprovaria 79% das coletas sem deriva.
+
 ## 4.6 Problemas encontrados e ajustes no plano
 
 | # | Problema observado no piloto | Ajuste para a coleta completa (S02) |
@@ -97,6 +99,8 @@ O `scripts/diagnostico_ordem.py` mede o desvio de cada execução em relação �
 | P4 | **Poder insuficiente com n = 30** para 5% em vazão e latência (seção 4.4). | **A4.** Depois do A1, rodar de novo `simulacao_poder.py` com o CV do mini-piloto. Se o poder continuar < 0,8, aumentar o n (o script aceita `--repeticoes`) ou restringir a família de testes do Holm às hipóteses principais (H-1 a H-3). |
 | P5 | A leitura de CPU do `docker stats` repetia cada valor (atualiza a cada 0,5 s) e incluía segundos antes de a carga começar. | **A5.** Já corrigido: leituras com ≥ 0,75 s de distância, dentro da janela `Start time`–`Finish time` do memtier, descartando os 2 s iniciais. |
 | P6 | Com n = 5 o Shapiro-Wilk quase nunca rejeita a normalidade, então o t de Welch foi escolhido na maioria dos casos. | **A6.** Manter o fluxo de decisão do plano. Com n = 30, conferir também o Q-Q plot antes de escolher o teste. |
+
+**Decisões da S02** sobre A1, A3 e A4: [docs/05-revisao-piloto-tamanho-amostra.md](05-revisao-piloto-tamanho-amostra.md). Resumo: ordem em blocos e checagem do ambiente pelo coletor (A1), condição de carga fixa para a CPU (A3) e n = 50 por tratamento (A4).
 
 ## 4.7 O que o piloto já indica (a confirmar na S02)
 

@@ -1,4 +1,4 @@
-"""Testes das regras de validacao V1-V9 do validacao_dados.py.
+"""Testes das regras de validacao V1-V10 do validacao_dados.py.
 
 Cada regra tem um caso que deve ser descartado e a execucao-base, que deve
 passar. Os parametros seguem o piloto: servidor em "0,4" (2 CPUs, CPU maxima
@@ -192,4 +192,29 @@ def test_resumo_aponta_tratamento_com_menos_repeticoes():
     meta = {**META, "parametros": {**META["parametros"], "repeticoes": 2}}
     r = resumo(validar(como_csv(execucao()), meta), meta)
     assert r["tratamentos_incompletos"] == [
-        {"software": "Redis", "comando": "GET", "pipeline": 1, "validas": 1}]
+        {"software": "Redis", "comando": "GET", "pipeline": 1, "taxa": 0, "validas": 1}]
+
+
+# --- carga fixa (V10) ------------------------------------------------------------
+
+@pytest.mark.parametrize("ops_s, valido", [
+    (50_000.0, True), (47_600.0, True), (52_400.0, True),  # dentro de +-5% da taxa
+    (47_400.0, False), (52_600.0, False),
+    (30_000.0, False),                                     # servidor nao deu conta da taxa
+])
+def test_v10_carga_fixa_precisa_atingir_a_taxa(ops_s, valido):
+    r = validar_uma(taxa=50_000, ops_s=ops_s)
+    assert r["valido"] == valido
+    assert ("V10" in r["motivo_descarte"]) == (not valido)
+
+
+def test_sem_coluna_taxa_e_carga_saturada():
+    """O CSV do piloto nao tem a coluna `taxa`: tudo e carga saturada e V10 nao se aplica."""
+    r = validar(como_csv(execucao()), META)
+    assert (r["taxa"] == 0).all() and r["valido"].all()
+
+
+def test_carga_fixa_e_saturada_sao_tratamentos_diferentes():
+    """A mesma repeticao em carga fixa e saturada nao e duplicidade (V5)."""
+    df = como_csv(execucao(run_id="a", taxa=0), execucao(run_id="b", taxa=50_000, ops_s=50_000.0))
+    assert validar(df, META)["valido"].all()

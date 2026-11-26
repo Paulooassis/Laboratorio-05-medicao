@@ -10,16 +10,26 @@ o outro mediana 1 + efeito.
 
 - Erro tipo I: efeito = 0, n = 30, alfa = 0,05 -> taxa de rejeicao deve ficar
   perto de 0,05.
-- Poder: efeito = 5% (diferenca minima relevante do plano), n em 5..50, com
-  alfa = 0,05 (nominal) e alfa = 0,05/20 = 0,0025 (pior caso do Holm com
-  20 testes, equivalente a Bonferroni).
+- Poder: efeito = 5% (diferenca minima relevante do plano), n em 5..100, com
+  alfa = 0,05 (nominal) e alfa = 0,05/m (pior caso do Holm, equivalente a
+  Bonferroni). A familia e a mesma do analise.py (analise.metricas_testadas):
+  m = 18 com carga fixa (S02) e m = 20 sem ela (piloto). So as combinacoes
+  metrica x condicao que o analise.py testa entram na simulacao.
+- Cenarios: o mesmo poder numa grade de CVs, sem depender da coleta. Diz ate
+  que CV o n planejado ainda da poder >= 0,8.
+
+Decisao (docs/05, D3): o n planejado (--n-planejado, padrao 50) basta se der
+poder >= 0,8 com alfa corrigido nas hipoteses-alvo: H-1 e H-2 (M1 e M2, carga
+saturada), H-4 (M4) e H-5 (M5, carga fixa; na coleta sem carga fixa, M5
+saturada). H-3 (p99) e testada, mas nao e alvo de poder: a cauda tem CV de 8 a
+16% mesmo sem deriva, e o n para 5% passaria de 100 por tratamento.
 
 Saidas em results/<coleta>/:
-  erro_tipo1.csv, poder.csv, poder.md, poder.png
+  erro_tipo1.csv, poder.csv, poder_cenarios.csv, poder.md, poder.png
 
 Uso:
-    python3 scripts/simulacao_poder.py --coleta piloto
-    python3 scripts/simulacao_poder.py --coleta piloto --replicas 5000 --efeito 0.05
+    python3 scripts/simulacao_poder.py --coleta minipiloto
+    python3 scripts/simulacao_poder.py --coleta piloto --replicas 5000 --efeito 0.05 --n-planejado 50
 """
 
 from __future__ import annotations
@@ -36,6 +46,8 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from scipy import stats  # noqa: E402
 
+from analise import metricas_testadas  # noqa: E402  (mesma familia de testes da analise)
+
 RAIZ = Path(__file__).resolve().parent.parent
 METRICAS = {
     "ops_s": "M1 Vazão",
@@ -44,10 +56,12 @@ METRICAS = {
     "mem_rss_mib": "M4 Memória",
     "cpu_medio_pct": "M5 CPU",
 }
-N_GRADE = [5, 10, 15, 20, 30, 40, 50]
+N_GRADE = [5, 10, 15, 20, 30, 40, 50, 60, 80, 100]
+CV_GRADE = [0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.10]
 ALFA = 0.05
-N_TESTES = 20
-N_PLANEJADO = 30
+N_PLANEJADO = 50
+ALVO = ["M1 Vazão", "M2 Latência p50", "M4 Memória", "M5 CPU"]  # H-3 (p99) fica fora: ver docstring
+PODER_MIN = 0.8
 SEMENTE = 20261119
 
 
@@ -60,90 +74,138 @@ def taxa_rejeicao(cv: float, efeito: float, n: int, alfa: float, replicas: int,
     return float((p < alfa).mean())
 
 
+def com_taxa(df: pd.DataFrame) -> pd.DataFrame:
+    """Coletas sem a coluna `taxa` (piloto) sao todas de carga saturada (taxa 0)."""
+    df = df.copy()
+    df["taxa"] = df["taxa"].fillna(0).astype(int) if "taxa" in df else 0
+    return df
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--coleta", default="piloto")
     ap.add_argument("--replicas", type=int, default=2000)
     ap.add_argument("--efeito", type=float, default=0.05, help="diferenca relativa minima relevante")
+    ap.add_argument("--n-planejado", type=int, default=N_PLANEJADO, help="execucoes por tratamento a conferir")
     args = ap.parse_args()
+    n_plan = args.n_planejado
+    n_grade = sorted(set(N_GRADE) | {n_plan})
 
     entrada = RAIZ / "data" / "processed" / f"{args.coleta}_validado.csv"
     if not entrada.exists():
         print(f"ERRO: {entrada} nao encontrado. Rode antes o validacao_dados.py.", file=sys.stderr)
         return 1
-    df = pd.read_csv(entrada)
+    df = com_taxa(pd.read_csv(entrada))
     df = df[df["valido"]]
+    tem_carga_fixa = bool((df["taxa"] > 0).any())
     rng = np.random.default_rng(SEMENTE)
     saida = RAIZ / "results" / args.coleta
     saida.mkdir(parents=True, exist_ok=True)
 
     # CV por metrica x condicao (maior CV entre os dois softwares)
     cvs = []
-    for (cmd, pipe), g in df.groupby(["comando", "pipeline"]):
-        for m, nome in METRICAS.items():
+    for (cmd, pipe, taxa), g in df.groupby(["comando", "pipeline", "taxa"]):
+        for m in metricas_testadas(taxa, tem_carga_fixa):
+            nome = METRICAS[m]
             cv_sw = g.groupby("software")[m].agg(lambda x: x.std(ddof=1) / x.mean())
-            cvs.append(dict(metrica=nome, coluna=m, comando=cmd, pipeline=pipe,
-                            cv_redis=cv_sw.get("Redis", np.nan), cv_valkey=cv_sw.get("Valkey", np.nan),
+            cvs.append(dict(metrica=nome, coluna=m, comando=cmd, pipeline=pipe, taxa=taxa,
+                            alvo=nome in ALVO, cv_redis=cv_sw.get("Redis", np.nan), cv_valkey=cv_sw.get("Valkey", np.nan),
                             cv=float(cv_sw.max())))
     cvs = pd.DataFrame(cvs)
+    n_testes = len(cvs)  # uma linha por teste da familia do Holm
+    alfa_holm = ALFA / n_testes
 
     # Erro tipo I (efeito 0) com n planejado
     erro1 = []
     for _, c in cvs.iterrows():
-        erro1.append(dict(metrica=c.metrica, comando=c.comando, pipeline=c.pipeline, n=N_PLANEJADO,
+        erro1.append(dict(metrica=c.metrica, comando=c.comando, pipeline=c.pipeline, taxa=c.taxa, n=n_plan,
                           alfa=ALFA, taxa_rejeicao_h0_verdadeira=taxa_rejeicao(
-                              c.cv, 0.0, N_PLANEJADO, ALFA, args.replicas, rng)))
+                              c.cv, 0.0, n_plan, ALFA, args.replicas, rng)))
     erro1 = pd.DataFrame(erro1)
     erro1.to_csv(saida / "erro_tipo1.csv", index=False)
 
     # Poder para o efeito minimo relevante
     poder = []
     for _, c in cvs.iterrows():
-        for n in N_GRADE:
-            for rotulo, alfa in [("nominal", ALFA), ("holm_pior_caso", ALFA / N_TESTES)]:
-                poder.append(dict(metrica=c.metrica, comando=c.comando, pipeline=c.pipeline, cv=c.cv,
-                                  n=n, alfa_tipo=rotulo, alfa=alfa, efeito=args.efeito,
+        for n in n_grade:
+            for rotulo, alfa in [("nominal", ALFA), ("holm_pior_caso", alfa_holm)]:
+                poder.append(dict(metrica=c.metrica, comando=c.comando, pipeline=c.pipeline, taxa=c.taxa,
+                                  alvo=c.alvo, cv=c.cv, n=n, alfa_tipo=rotulo, alfa=alfa, efeito=args.efeito,
                                   poder=taxa_rejeicao(c.cv, args.efeito, n, alfa, args.replicas, rng)))
     poder = pd.DataFrame(poder)
     poder.to_csv(saida / "poder.csv", index=False)
 
-    # Resumo: poder em n = 30 e menor n com poder >= 0,8 (alfa do pior caso do Holm)
+    # Cenarios: poder x CV, independente da coleta (alfa do pior caso do Holm)
+    cenarios = pd.DataFrame([dict(cv=cv, n=n, alfa=alfa_holm, efeito=args.efeito,
+                                  poder=taxa_rejeicao(cv, args.efeito, n, alfa_holm, args.replicas, rng))
+                             for cv in CV_GRADE for n in n_grade])
+    cenarios.to_csv(saida / "poder_cenarios.csv", index=False)
+    ok_plan = cenarios[(cenarios["n"] == n_plan) & (cenarios["poder"] >= PODER_MIN)]["cv"]
+    cv_max = float(ok_plan.max()) if len(ok_plan) else None
+
+    # Resumo: poder no n planejado e menor n com poder >= 0,8 (alfa do pior caso do Holm)
     pior = poder[poder["alfa_tipo"] == "holm_pior_caso"]
+    nominal = poder[poder["alfa_tipo"] == "nominal"]
     resumo = []
-    for (met, cmd, pipe), g in pior.groupby(["metrica", "comando", "pipeline"], sort=False):
-        ok = g[g["poder"] >= 0.8]["n"]
-        resumo.append(dict(metrica=met, comando=cmd, pipeline=pipe, cv_pct=100 * g["cv"].iloc[0],
-                           poder_n30=float(g.loc[g["n"] == N_PLANEJADO, "poder"].iloc[0]),
-                           poder_n30_nominal=float(poder[(poder["metrica"] == met) & (poder["comando"] == cmd)
-                                                         & (poder["pipeline"] == pipe) & (poder["n"] == N_PLANEJADO)
-                                                         & (poder["alfa_tipo"] == "nominal")]["poder"].iloc[0]),
+    for (met, cmd, pipe, taxa), g in pior.groupby(["metrica", "comando", "pipeline", "taxa"], sort=False):
+        ok = g[g["poder"] >= PODER_MIN]["n"]
+        gn = nominal[(nominal["metrica"] == met) & (nominal["comando"] == cmd) & (nominal["pipeline"] == pipe)
+                     & (nominal["taxa"] == taxa) & (nominal["n"] == n_plan)]
+        resumo.append(dict(metrica=met, comando=cmd, pipeline=pipe, taxa=taxa, alvo=bool(g["alvo"].iloc[0]),
+                           cv_pct=100 * g["cv"].iloc[0],
+                           poder_nplan=float(g.loc[g["n"] == n_plan, "poder"].iloc[0]),
+                           poder_nplan_nominal=float(gn["poder"].iloc[0]),
                            n_min_80=int(ok.min()) if len(ok) else None))
     resumo = pd.DataFrame(resumo)
 
+    def carga(taxa: int) -> str:
+        return f"{taxa} ops/s" if taxa else "saturada"
+
+    a_txt = f"{alfa_holm:.4f}".replace(".", ",")
+    p_txt = f"{PODER_MIN:g}".replace(".", ",")
     linhas = [f"# Simulação de poder e erro tipo I: coleta `{args.coleta}`", "",
               f"Mann-Whitney U bilateral, dados log-normais com o maior CV observado entre Redis e Valkey, "
-              f"{args.replicas} réplicas por cenário, efeito = {100 * args.efeito:.0f}% na mediana.", "",
-              "## Erro tipo I (H0 verdadeira, n = 30, α = 0,05)", "",
+              f"{args.replicas} réplicas por cenário, efeito = {100 * args.efeito:.0f}% na mediana. "
+              f"α corrigido = 0,05 / {n_testes} = {a_txt} (pior caso do Holm).", "",
+              f"## Erro tipo I (H0 verdadeira, n = {n_plan}, α = 0,05)", "",
               f"Taxa de rejeição: mínima {erro1['taxa_rejeicao_h0_verdadeira'].min():.3f}, "
               f"média {erro1['taxa_rejeicao_h0_verdadeira'].mean():.3f}, "
               f"máxima {erro1['taxa_rejeicao_h0_verdadeira'].max():.3f} (esperado ≈ 0,05).", "",
-              "## Poder para detectar 5% de diferença", "",
-              "| Métrica | Comando | Pipeline | CV piloto (%) | Poder n=30 (α=0,05) | Poder n=30 (α=0,0025) | Menor n com poder ≥ 0,8 (α=0,0025) |",
-              "|---|---|---|---|---|---|---|"]
+              f"## Poder para detectar {100 * args.efeito:.0f}% de diferença", "",
+              f"Alvo = entra na decisão do n (H-1, H-2, H-4 e H-5; ver docs/05, D3).", "",
+              f"| Métrica | Comando | Pipeline | Carga | Alvo | CV (%) | Poder n={n_plan} (α=0,05) | "
+              f"Poder n={n_plan} (α={a_txt}) | Menor n com poder ≥ {p_txt} (α={a_txt}) |",
+              "|---|---|---|---|---|---|---|---|---|"]
     for _, r in resumo.iterrows():
-        nmin = f"{r.n_min_80}" if pd.notna(r.n_min_80) else f"> {max(N_GRADE)}"
-        linhas.append(f"| {r.metrica} | {r.comando} | {r.pipeline} | {r.cv_pct:.2f} | {r.poder_n30_nominal:.2f} | "
-                      f"{r.poder_n30:.2f} | {nmin} |")
-    insuf = resumo[resumo["poder_n30"] < 0.8]
+        nmin = f"{int(r.n_min_80)}" if pd.notna(r.n_min_80) else f"> {max(n_grade)}"
+        linhas.append(f"| {r.metrica} | {r.comando} | {r.pipeline} | {carga(r.taxa)} | {'sim' if r.alvo else 'não'} | "
+                      f"{r.cv_pct:.2f} | {r.poder_nplan_nominal:.2f} | {r.poder_nplan:.2f} | {nmin} |")
+
+    linhas += ["", f"## Cenários: poder × CV (α = {a_txt}, efeito {100 * args.efeito:.0f}%)", "",
+               "| CV (%) | " + " | ".join(f"n={n}" for n in n_grade) + " |",
+               "|---|" + "---|" * len(n_grade)]
+    for cv, g in cenarios.groupby("cv"):
+        linhas.append(f"| {100 * cv:.0f} | " + " | ".join(f"{x:.2f}" for x in g.sort_values("n")["poder"]) + " |")
+    linhas += ["", f"Com n = {n_plan}, o poder fica ≥ {p_txt} até CV = "
+               + (f"{100 * cv_max:.0f}%." if cv_max is not None else "– (nenhum CV da grade).")]
+
+    insuf = resumo[resumo["alvo"] & (resumo["poder_nplan"] < PODER_MIN)]
+    fora = resumo[~resumo["alvo"] & (resumo["poder_nplan"] < PODER_MIN)]
     linhas += ["", "## Decisão", ""]
     if insuf.empty:
-        linhas.append("Com α corrigido para 20 testes, n = 30 dá poder ≥ 0,8 em todas as métricas e condições. "
-                      "**Mantém-se n = 30 por tratamento.**")
+        linhas.append(f"**APROVADO:** com α corrigido para {n_testes} testes, n = {n_plan} dá poder ≥ {p_txt} "
+                      f"em todas as hipóteses-alvo. **Mantém-se n = {n_plan} por tratamento.**")
     else:
-        linhas.append(f"{len(insuf)} de {len(resumo)} combinações métrica × condição ficam com poder < 0,8 "
-                      "em n = 30 (α corrigido):")
-        linhas += [f"- {r.metrica}, {r.comando} p={r.pipeline} (CV {r.cv_pct:.1f}%): poder {r.poder_n30:.2f}"
-                   for _, r in insuf.iterrows()]
+        linhas.append(f"**REPROVADO:** {len(insuf)} combinação(ões) alvo ficam com poder < {p_txt} em "
+                      f"n = {n_plan} (α corrigido). Não aumentar o n além do orçamento: corrigir o ambiente "
+                      "(docs/05, D1) e repetir o mini-piloto.")
+        linhas += [f"- {r.metrica}, {r.comando} p={r.pipeline} {carga(r.taxa)} (CV {r.cv_pct:.1f}%): "
+                   f"poder {r.poder_nplan:.2f}" for _, r in insuf.iterrows()]
+    if not fora.empty:
+        linhas += ["", f"Fora do alvo, com poder < {p_txt} (testadas, mas uma não rejeição não é evidência de "
+                   "igualdade):"]
+        linhas += [f"- {r.metrica}, {r.comando} p={r.pipeline} {carga(r.taxa)} (CV {r.cv_pct:.1f}%): "
+                   f"poder {r.poder_nplan:.2f}" for _, r in fora.iterrows()]
     md = "\n".join(linhas) + "\n"
     (saida / "poder.md").write_text(md, encoding="utf-8")
 
@@ -152,17 +214,18 @@ def main() -> int:
     fig, eixos = plt.subplots(1, len(metricas), figsize=(3.3 * len(metricas), 3.4), sharey=True)
     for ax, met in zip(eixos, metricas):
         g = pior[pior["metrica"] == met]
-        for (cmd, pipe), gg in g.groupby(["comando", "pipeline"]):
-            ax.plot(gg["n"], gg["poder"], marker="o", ms=3, label=f"{cmd} p={pipe}")
-        ax.axhline(0.8, color="gray", ls="--", lw=1)
-        ax.axvline(N_PLANEJADO, color="gray", ls=":", lw=1)
+        for (cmd, pipe, taxa), gg in g.groupby(["comando", "pipeline", "taxa"]):
+            ax.plot(gg["n"], gg["poder"], marker="o", ms=3,
+                    label=f"{cmd} p={pipe}" + (" fixa" if taxa else ""))
+        ax.axhline(PODER_MIN, color="gray", ls="--", lw=1)
+        ax.axvline(n_plan, color="gray", ls=":", lw=1)
         ax.set_title(met, fontsize=10)
         ax.set_xlabel("n por grupo")
         ax.grid(alpha=0.3)
-    eixos[0].set_ylabel("Poder (α = 0,0025)")
+    eixos[0].set_ylabel(f"Poder (α = {a_txt})")
     eixos[-1].legend(fontsize=8)
-    fig.suptitle(f"Poder do Mann-Whitney para detectar {100 * args.efeito:.0f}% de diferença (CV do piloto)",
-                 fontsize=11)
+    fig.suptitle(f"Poder do Mann-Whitney para detectar {100 * args.efeito:.0f}% de diferença "
+                 f"(CV da coleta {args.coleta})", fontsize=11)
     fig.tight_layout()
     fig.savefig(saida / "poder.png", dpi=130)
     plt.close(fig)

@@ -74,7 +74,7 @@ Justificativas completas: [docs/02, seção 2.4](docs/02-pergunta-gqm-caminho-ca
 ### 6. Hipóteses, plano de coleta e plano de análise
 
 - **Hipóteses bilaterais** H-1 a H-5 (Redis = Valkey em M1–M5) e H-6 (interação software × *pipeline*), α = 0,05 com Holm-Bonferroni.
-- **Desenho:** fatorial 2 (software) × 2 (comando `GET`/`SET`) × 2 (*pipeline* 1/16) = 8 tratamentos, **30 execuções por tratamento** em ordem sorteada, contêiner novo a cada execução.
+- **Desenho:** fatorial 2 (software) × 2 (comando `GET`/`SET`) × 2 (*pipeline* 1/16) = 8 tratamentos, contêiner novo a cada execução. Ajustado na S02 ([docs/05](docs/05-revisao-piloto-tamanho-amostra.md)): mais 4 tratamentos de **carga fixa** (50 mil ops/s) para comparar a CPU, **50 execuções por tratamento** e ordem em **blocos completos aleatorizados**.
 - **Análise:** descritiva por tratamento, Shapiro-Wilk → t de Welch ou Mann-Whitney U, δ de Cliff ou g de Hedges, ANOVA/ART para a interação, diferença % das medianas com IC 95% por *bootstrap*. Diferença < 5% é tratada como irrelevante na prática.
 
 Detalhes: [docs/03-metricas-hipoteses-planos.md](docs/03-metricas-hipoteses-planos.md).
@@ -92,6 +92,14 @@ Rodada em 19/11/2026: 8 tratamentos × 5 repetições = **40 execuções válida
 | Deriva temporal | 3 execuções seguidas (todas Redis) com vazão 15–23% abaixo da mediana; sem elas, a vantagem do Redis em vazão e latência p50 cresce até 1,5 p.p. A memória não muda |
 
 **Ajustes para a S02:** coletar na tomada com governador `performance` (o piloto rodou na bateria, em `powersave`), refazer a simulação de poder com um mini-piloto (sem deriva no `diagnostico_ordem.py`) e redefinir o n; tratar o efeito teto da CPU com uma condição de carga fixa ou a métrica "CPU por 100 mil ops".
+
+**Decidido na S02** ([docs/05](docs/05-revisao-piloto-tamanho-amostra.md)):
+
+| Problema | Decisão |
+|---|---|
+| Deriva temporal | O coletor não roda fora da tomada ou do governador `performance`. Ordem em blocos completos aleatorizados e critério de aceite automático no `diagnostico_ordem.py`. Sem as 3 execuções afetadas, o CV de vazão e latência p50 cai de 8–12% para 2–5% |
+| Efeito teto da CPU | Condição de carga fixa (50.000 ops/s, *pipeline* 1), em que H-5 é testada. "CPU por 100 mil ops" foi rejeitada: no teto, ela tem correlação de 0,9994 a 0,9999 com 1/vazão |
+| Tamanho da amostra | **n = 50 por tratamento** (612 execuções, ~5 h 35 min): poder ≥ 0,8 para 5% até CV de 6% com α corrigido para 18 testes. Antes, rodar um mini-piloto como portão |
 
 Dados: [data/raw/piloto/](data/raw/piloto/) e [data/processed/](data/processed/) · Tabelas e gráficos: [results/piloto/](results/piloto/)
 
@@ -121,11 +129,15 @@ docker compose down
 
 # Estudo (cada script grava em data/ ou results/)
 python3 scripts/coleta_impacto.py                                   # evidências de impacto
-python3 scripts/coleta_experimento.py --coleta piloto --repeticoes 5 # execuções (~32 min)
+python3 scripts/coleta_experimento.py --coleta piloto --repeticoes 5 --ordem sorteio --taxa-fixa 0  # piloto (~26 min)
 python3 scripts/validacao_dados.py   --coleta piloto                 # validação
 python3 scripts/analise.py           --coleta piloto                 # descritiva, gráficos, testes
 python3 scripts/simulacao_poder.py   --coleta piloto                 # poder e erro tipo I
 python3 scripts/diagnostico_ordem.py --coleta piloto                 # deriva ao longo da coleta
+
+# S02: mini-piloto (portão) e coleta completa (docs/05, seção 5.3)
+python3 scripts/coleta_experimento.py --coleta minipiloto --repeticoes 3   # ~26 min
+python3 scripts/coleta_experimento.py --coleta completa   --repeticoes 50  # ~5 h 35 min
 ```
 
 **Testes** (regras de validação e funções estatísticas):
@@ -140,7 +152,7 @@ No Windows, troque `python3` por `py`. Ajuste `--cpus-servidor` e `--cpus-client
 ## Estrutura do repositório
 
 ```
-docs/                     proposta: software, pergunta, GQM, categorias, planos, piloto
+docs/                     proposta, piloto e revisão do piloto (tamanho da amostra)
 scripts/                  coleta, validação, análise e simulação (ver scripts/README.md)
 tests/                    testes automatizados da validação e da análise (pytest)
 data/impacto/             evidências públicas de impacto (CSV/JSON com fonte e data)

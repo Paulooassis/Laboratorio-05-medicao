@@ -7,6 +7,7 @@
 | Independente (fator principal) | Software | Redis 8.10.3 · Valkey 9.1.3 |
 | Independente (fator de bloco) | Comando | `GET` (leitura) · `SET` (escrita) |
 | Independente (fator de bloco) | *Pipeline* | 1 (sem *pipeline*) · 16 |
+| Independente (fator de bloco) | Carga | saturada (sem limite de taxa) · fixa (50.000 ops/s, só com *pipeline* 1; ver [docs/05, D2](05-revisao-piloto-tamanho-amostra.md#52-d2-efeito-teto-da-cpu)) |
 | Fixas (controladas) | Tamanho do valor, nº de clientes, nº de chaves, duração, configuração do servidor, máquina | 256 bytes · 4 *threads* × 50 conexões · 100.000 chaves · 30 s · padrão da imagem oficial · mesma máquina |
 | Dependentes | M1–M5 | ver 3.2 |
 
@@ -18,7 +19,7 @@
 | M2 | Latência p50 | Servidor em execução | Produto | Comportamento no tempo (tempo de resposta típico) | Externo | Derivada (percentil da distribuição das latências) | Razão | ms | `memtier_benchmark` (`Percentile Latencies.p50.00`) |
 | M3 | Latência p99 | Servidor em execução | Produto | Comportamento no tempo (cauda) | Externo | Derivada (percentil) | Razão | ms | `memtier_benchmark` (`p99.00`) |
 | M4 | Memória residente | Processo do servidor | Recurso | Utilização de memória | Externo | Direta | Razão | MiB | `INFO memory` → `used_memory_rss` ao final da execução |
-| M5 | Uso médio de CPU | Contêiner do servidor | Recurso | Utilização de CPU | Externo | Derivada (média das amostras de 1 s) | Razão | % de 1 núcleo | `docker stats --no-stream` a cada 1 s durante a carga |
+| M5 | Uso médio de CPU | Contêiner do servidor | Recurso | Utilização de CPU | Externo | Derivada (média das amostras de 1 s) | Razão | % de 1 núcleo | `docker stats` em modo contínuo (~1 leitura/s) durante a carga. Comparada entre os softwares só na **carga fixa**: na saturada, os dois ficam no teto (~100%) |
 | M6 | *Pulls* da imagem oficial | Software (distribuição) | Produto | Adoção | Externo | Direta | Razão (contagem) | *pulls* | API do Docker Hub |
 | M7 | Downloads mensais dos clientes | Ecossistema de clientes | Produto | Adoção | Externo | Direta | Razão (contagem) | downloads/mês | APIs do PyPI Stats e do npm |
 | M8 | Posição no DB-Engines | Software | Produto | Popularidade | Externo | Direta (publicada pela fonte) | **Ordinal** | posição | Página do sistema no DB-Engines |
@@ -32,7 +33,7 @@
 
 ## 3.3 Hipóteses
 
-As hipóteses são **bilaterais**, porque não há razão teórica forte para apostar em um sentido. Os dois servidores compartilham a base de código até a versão 7.2.4 e evoluíram de forma independente depois disso. Cada par é testado **em cada uma das 4 condições** (comando × *pipeline*), com nível de significância **α = 0,05** e correção de Holm-Bonferroni para as comparações múltiplas.
+As hipóteses são **bilaterais**, porque não há razão teórica forte para apostar em um sentido. Os dois servidores compartilham a base de código até a versão 7.2.4 e evoluíram de forma independente depois disso. H-1 a H-4 são testadas **em cada uma das 4 condições de carga saturada** (comando × *pipeline*). H-5 é testada **nas 2 condições de carga fixa** (`GET` e `SET`), onde a CPU não fica no teto ([docs/05, D2](05-revisao-piloto-tamanho-amostra.md#52-d2-efeito-teto-da-cpu)). O nível de significância é **α = 0,05**, com correção de Holm-Bonferroni para as comparações múltiplas.
 
 | ID | Pergunta | H0 (hipótese nula) | H1 (hipótese alternativa) |
 |---|---|---|---|
@@ -40,7 +41,7 @@ As hipóteses são **bilaterais**, porque não há razão teórica forte para ap
 | H-2 | Q2 | A latência p50 (M2) do Valkey é **igual** à do Redis. | A latência p50 do Valkey é **diferente** da do Redis. |
 | H-3 | Q2 | A latência p99 (M3) do Valkey é **igual** à do Redis. | A latência p99 do Valkey é **diferente** da do Redis. |
 | H-4 | Q3 | O uso de memória (M4) do Valkey é **igual** ao do Redis. | O uso de memória do Valkey é **diferente** do do Redis. |
-| H-5 | Q3 | O uso de CPU (M5) do Valkey é **igual** ao do Redis. | O uso de CPU do Valkey é **diferente** do do Redis. |
+| H-5 | Q3 | Com a mesma carga fixa, o uso de CPU (M5) do Valkey é **igual** ao do Redis. | Com a mesma carga fixa, o uso de CPU do Valkey é **diferente** do do Redis. |
 | H-6 | Q4 | A diferença Valkey − Redis em M1 **não depende** do *pipeline* (sem interação). | A diferença Valkey − Redis em M1 **depende** do *pipeline* (há interação). |
 
 Em notação, para H-1 a H-5, sendo θ a mediana (ou a média, se o teste paramétrico for aplicável):
@@ -65,11 +66,12 @@ As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma
 
 ### Desenho e amostra
 
-- **Desenho:** fatorial completo 2 (software) × 2 (comando) × 2 (*pipeline*) = **8 tratamentos**.
-- **Repetições:** **30 execuções independentes por tratamento**, totalizando **240 execuções** de 30 s cada (≈ 2 h 40 min com reinícios).
+- **Desenho:** fatorial completo 2 (software) × 2 (comando) × 2 (*pipeline*) = **8 tratamentos em carga saturada**, mais 2 (software) × 2 (comando) = **4 tratamentos em carga fixa** (*pipeline* 1, 50.000 ops/s). Total: **12 tratamentos**.
+- **Repetições:** **50 execuções independentes por tratamento** ([docs/05, D3](05-revisao-piloto-tamanho-amostra.md#53-d3-tamanho-da-amostra)), totalizando **600 execuções medidas** de 30 s cada (≈ 5 h 35 min com reinícios e aquecimento). Era 30 na proposta. O piloto mostrou que esse n não basta.
 - **Unidade experimental:** uma execução completa (contêiner novo → carga → coleta das métricas → contêiner removido).
-- **Aleatorização:** a ordem das 240 execuções é sorteada com semente fixa (registrada), para que efeitos de temperatura, *throttling* ou processos de fundo não se concentrem em um só software.
-- **Aquecimento:** 1 execução de aquecimento por tratamento, descartada (as 8 rodam antes das medidas, em ordem sorteada).
+- **Aleatorização em blocos:** a coleta roda em 50 **blocos completos**. Cada bloco tem uma execução de cada tratamento, em ordem sorteada com semente fixa (registrada). Assim, efeitos de temperatura, *throttling* ou processos de fundo se distribuem igualmente entre os tratamentos ([docs/05, D1](05-revisao-piloto-tamanho-amostra.md#51-d1-deriva-temporal)).
+- **Aquecimento:** 1 execução de aquecimento por tratamento, descartada (as 12 rodam antes das medidas, em ordem sorteada).
+- **Mini-piloto (portão):** antes da coleta completa, 3 repetições por tratamento na máquina do estudo. A coleta completa só roda se o critério de deriva e o de poder derem APROVADO (docs/05, seção 5.3).
 
 ### Procedimento de cada execução
 
@@ -80,6 +82,7 @@ As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma
    memtier_benchmark -s <servidor> -p 6379 -t 4 -c 50 --test-time=30 \
      --data-size=256 --key-maximum=100000 --key-pattern=R:R \
      --ratio=<1:0 para SET | 0:1 para GET> --pipeline=<1|16> \
+     [--rate-limiting=250   # só na carga fixa: 250 req/s × 200 conexões = 50.000 ops/s] \
      --hide-histogram --json-out-file=<arquivo>.json
    ```
 4. Durante a carga, amostrar `docker stats` a cada 1 s (M5). Ao final, ler `INFO memory` (M4).
@@ -88,7 +91,7 @@ As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma
 
 ### Controle do ambiente
 
-- Mesma máquina para todas as execuções, ligada na tomada, com perfil de energia "alto desempenho" e aplicativos fechados.
+- Mesma máquina para todas as execuções, ligada na tomada, com governador de CPU `performance` e aplicativos fechados. O coletor confere a tomada e o governador antes de começar e não roda se estiverem fora do protocolo.
 - Registrar no arquivo de metadados: CPU, RAM, sistema operacional, versão do Docker/WSL2, *digests* das imagens e semente.
 
 ### Coleta piloto (Sprint 1)
@@ -113,6 +116,7 @@ As métricas de impacto (M6–M8) **não** têm hipóteses. São usadas de forma
 ### Validação e versionamento dos dados
 
 - Execução **inválida** (e repetida) se: o `memtier_benchmark` reportar erros de conexão, a vazão for 0 ou o contêiner reiniciar durante a carga.
+- Na carga fixa, execução **descartada** se a vazão ficar fora de ±5% da taxa planejada (regra V10). Se o servidor não atingiu a carga, a CPU não é comparável.
 - *Outliers* **não** são removidos automaticamente. São sinalizados (fora de Q1 − 1,5·IQR / Q3 + 1,5·IQR) e discutidos.
 - Dados brutos e processados versionados no repositório (`data/raw/`, `data/processed/`), junto com os metadados de cada coleta.
 
@@ -154,12 +158,12 @@ Além do tamanho do efeito padronizado, reporta-se a **diferença percentual ent
 
 ### Comparações múltiplas e relevância prática
 
-- São 5 hipóteses × 4 condições = 20 testes. O p-valor é ajustado por **Holm-Bonferroni**.
+- São 4 hipóteses (H-1 a H-4) × 4 condições saturadas + H-5 × 2 condições de carga fixa = **18 testes**. O p-valor é ajustado por **Holm-Bonferroni**.
 - **Relevância prática:** uma diferença menor que **5%** na mediana é tratada como irrelevante na prática, mesmo que seja estatisticamente significativa.
 
 ### Poder e erro tipo I (reaproveitado do Lab04)
 
-- Com a variância estimada no piloto, simula-se (≥ 1.000 réplicas) o erro tipo I e o poder do Mann-Whitney para n = 30 e efeito de 5%. Se o poder ficar abaixo de 0,8, o n é aumentado antes da coleta completa.
+- Com a variância estimada no piloto, simula-se (≥ 1.000 réplicas) o erro tipo I e o poder do Mann-Whitney para efeito de 5%. Com o piloto, n = 30 não bastava, e o n passou para **50** (docs/05, D3). O mini-piloto confirma esse n. H-3 (p99) é testada, mas não é alvo de poder (a cauda é ruidosa demais para detectar 5% com um n viável).
 
 ### Ferramentas
 
