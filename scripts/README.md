@@ -162,8 +162,10 @@ python3 scripts/analise.py --coleta piloto
 Lê só as execuções válidas e gera em `results/<coleta>/`:
 
 - `descritiva.csv` / `.md`: n, média, mediana, DP, CV, mín, máx, Q1, Q3, IQR e IC 95% da mediana (*bootstrap*, 10.000 reamostragens) por tratamento e métrica;
-- `testes.csv` / `.md`: Shapiro-Wilk em cada grupo → t de Welch ou Mann-Whitney U, g de Hedges ou δ de Cliff, diferença % das medianas e p ajustado por Holm-Bonferroni. Com carga fixa, a família tem 18 testes: M1–M4 nas 4 condições saturadas e M5 só na carga fixa. Sem ela (piloto), são 20 testes (M1–M5 × 4);
+- `testes.csv` / `.md`: Shapiro-Wilk em cada grupo → t de Welch ou Mann-Whitney U, g de Hedges ou δ de Cliff, diferença % das medianas com **IC 95% por *bootstrap*** (10.000 reamostragens, cada grupo reamostrado separadamente), **leitura prática** pelo IC e pelo limiar de 5% (*relevante*: IC inteiro além de ±5%; *irrelevante*: IC inteiro dentro de ±5%; *inconclusivo*: IC cruza o limiar) e p ajustado por Holm-Bonferroni. Com carga fixa, a família tem 18 testes: M1–M4 nas 4 condições saturadas e M5 só na carga fixa. Sem ela (piloto), são 20 testes (M1–M5 × 4);
 - `boxplot_<métrica>.png`: *boxplot* com os pontos, por condição;
+- `ecdf_lat_p50_ms.png` / `ecdf_lat_p99_ms.png`: ECDF das latências por condição (a distribuição inteira, não só mediana e quartis);
+- `qq_<métrica>.png`: Q-Q plot de cada grupo contra a normal, para conferir a escolha entre Welch e Mann-Whitney (A6 do piloto);
 - `interacao_vazao.png`: gráfico de interação software × *pipeline* (H-6).
 
 ---

@@ -159,7 +159,7 @@ Além do tamanho do efeito padronizado, reporta-se a **diferença percentual ent
 ### Comparações múltiplas e relevância prática
 
 - São 4 hipóteses (H-1 a H-4) × 4 condições saturadas + H-5 × 2 condições de carga fixa = **18 testes**. O p-valor é ajustado por **Holm-Bonferroni**.
-- **Relevância prática:** uma diferença menor que **5%** na mediana é tratada como irrelevante na prática, mesmo que seja estatisticamente significativa.
+- **Relevância prática:** uma diferença menor que **5%** na mediana é tratada como irrelevante na prática, mesmo que seja estatisticamente significativa. A leitura usa o IC 95% da diferença: **relevante** se o IC inteiro estiver além de ±5%, **irrelevante** se estiver inteiro dentro de ±5% e **inconclusivo** se cruzar o limiar. Assim, uma não rejeição só vira "sem diferença relevante" quando o IC permite, o que importa para H-3 (p99), que não é alvo de poder.
 
 ### Poder e erro tipo I (reaproveitado do Lab04)
 
