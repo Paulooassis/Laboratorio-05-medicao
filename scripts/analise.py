@@ -10,7 +10,11 @@ Segue o plano de analise (docs/03-metricas-hipoteses-planos.md, secao 3.5):
    para a vazao.
 3. Testes por condicao (Redis x Valkey): Shapiro-Wilk em cada grupo -> t de Welch
    (os dois normais) ou Mann-Whitney U (bilateral); tamanho do efeito (g de Hedges
-   ou delta de Cliff); diferenca percentual das medianas; p ajustado por
+   ou delta de Cliff); diferenca percentual das medianas com IC 95% por
+   bootstrap (10.000 reamostragens, cada grupo reamostrado separadamente) e a
+   leitura pratica pelo IC e pelo limiar de 5% (relevante, irrelevante ou
+   inconclusivo); Q-Q plot de cada grupo para conferir a normalidade (A6 do
+   piloto); p ajustado por
    Holm-Bonferroni sobre a familia de testes:
    - com a condicao de carga fixa (taxa > 0, desenho da S02): M1-M4 nas 4
      condicoes saturadas e M5 so na carga fixa = 18 testes. Na carga saturada a
@@ -23,7 +27,7 @@ o script e ver a ordem de grandeza dos efeitos, nao para concluir.
 
 Saidas em results/<coleta>/:
   descritiva.csv / descritiva.md, testes.csv / testes.md,
-  boxplot_<metrica>.png, ecdf_<latencia>.png, interacao_vazao.png
+  boxplot_<metrica>.png, ecdf_<latencia>.png, qq_<metrica>.png, interacao_vazao.png
 
 Uso:
     python3 scripts/analise.py --coleta piloto
@@ -55,6 +59,7 @@ SOFTWARES = ["Redis", "Valkey"]
 CORES = {"Redis": "#c0392b", "Valkey": "#2471a3"}
 ALFA = 0.05
 SEMENTE = 20261119
+LIMIAR_RELEVANCIA = 5.0  # % na mediana (docs/03, secao 3.5)
 CONDICAO = ["comando", "pipeline", "taxa"]
 
 
@@ -92,6 +97,32 @@ def descritiva(df: pd.DataFrame) -> pd.DataFrame:
                 min=x.min(), max=x.max(), q1=q1, q3=q3, iqr=q3 - q1,
                 ic95_mediana_inf=lo, ic95_mediana_sup=hi))
     return pd.DataFrame(linhas)
+
+
+def ic_dif_mediana_pct(v: np.ndarray, r: np.ndarray, rng: np.random.Generator,
+                      b: int = 10_000) -> tuple[float, float]:
+    """IC 95% (percentil) de 100 x (mediana V - mediana R) / mediana R.
+
+    Os grupos sao independentes, entao cada um e reamostrado separadamente.
+    """
+    med_v = np.median(rng.choice(v, size=(b, len(v)), replace=True), axis=1)
+    med_r = np.median(rng.choice(r, size=(b, len(r)), replace=True), axis=1)
+    dif = 100 * (med_v - med_r) / med_r
+    return float(np.percentile(dif, 2.5)), float(np.percentile(dif, 97.5))
+
+
+def leitura_pratica(ic_inf: float, ic_sup: float, limiar: float = LIMIAR_RELEVANCIA) -> str:
+    """Le o IC da diferenca contra o limiar de relevancia pratica.
+
+    - relevante: o IC inteiro esta alem de +-limiar (diferenca de pelo menos limiar%);
+    - irrelevante: o IC inteiro esta dentro de (-limiar, +limiar);
+    - inconclusivo: o IC cruza o limiar (os dados nao decidem).
+    """
+    if ic_inf >= limiar or ic_sup <= -limiar:
+        return "relevante"
+    if -limiar < ic_inf and ic_sup < limiar:
+        return "irrelevante"
+    return "inconclusivo"
 
 
 def cliff_delta(a: np.ndarray, b: np.ndarray) -> float:
@@ -137,6 +168,7 @@ def metricas_testadas(taxa: int, tem_carga_fixa: bool) -> list[str]:
 
 def testes(df: pd.DataFrame) -> pd.DataFrame:
     df = com_taxa(df)
+    rng = np.random.default_rng(SEMENTE)
     linhas = []
     tem_carga_fixa = bool((df["taxa"] > 0).any())
     for (cmd, pipe, taxa), g in df.groupby(CONDICAO):
@@ -158,11 +190,14 @@ def testes(df: pd.DataFrame) -> pd.DataFrame:
                 efeito, nome_ef = cliff_delta(v, r), "delta de Cliff"
                 mag = magnitude_cliff(efeito)
             med_r, med_v = np.median(r), np.median(v)
+            ic_inf, ic_sup = ic_dif_mediana_pct(v, r, rng)
             linhas.append(dict(
                 metrica=mid, nome=nome, comando=cmd, pipeline=pipe, taxa=taxa,
                 n_redis=len(r), n_valkey=len(v),
                 mediana_redis=med_r, mediana_valkey=med_v,
                 dif_mediana_pct=100 * (med_v - med_r) / med_r,
+                ic95_dif_inf_pct=ic_inf, ic95_dif_sup_pct=ic_sup,
+                leitura_pratica=leitura_pratica(ic_inf, ic_sup),
                 shapiro_p_redis=p_sw_r, shapiro_p_valkey=p_sw_v, teste=teste, p=p,
                 tamanho_efeito=nome_ef, efeito=efeito, magnitude=mag,
                 delta_cliff=cliff_delta(v, r)))
@@ -170,7 +205,7 @@ def testes(df: pd.DataFrame) -> pd.DataFrame:
     if not res.empty:
         res["p_holm"] = holm(res["p"].to_numpy())
         res["significativo_holm"] = res["p_holm"] < ALFA
-        res["relevante_5pct"] = res["dif_mediana_pct"].abs() >= 5
+        res["relevante_5pct"] = res["dif_mediana_pct"].abs() >= LIMIAR_RELEVANCIA
     return res
 
 
@@ -199,6 +234,31 @@ def graficos(df: pd.DataFrame, saida: Path) -> list[Path]:
                      fontsize=11)
         fig.tight_layout()
         arq = saida / f"boxplot_{m}.png"
+        fig.savefig(arq, dpi=130)
+        plt.close(fig)
+        arquivos.append(arq)
+
+    # Q-Q plot de cada grupo (docs/03, secao 3.5): apoia a escolha entre Welch e Mann-Whitney
+    for m, (mid, nome, unid) in METRICAS.items():
+        fig, eixos = plt.subplots(1, len(condicoes), figsize=(3.2 * len(condicoes), 3.4))
+        for ax, (cmd, pipe, taxa) in zip(np.atleast_1d(eixos), condicoes):
+            g = df[(df["comando"] == cmd) & (df["pipeline"] == pipe) & (df["taxa"] == taxa)]
+            for s in SOFTWARES:
+                x = g.loc[g["software"] == s, m].to_numpy(dtype=float)
+                if len(x) < 3 or np.ptp(x) == 0:
+                    continue
+                (teor, obs), _ = stats.probplot((x - x.mean()) / x.std(ddof=1))
+                ax.scatter(teor, obs, s=12, color=CORES[s], label=s, zorder=3)
+            lim = ax.get_xlim()
+            ax.plot(lim, lim, color="gray", lw=1, ls="--")
+            ax.set_title(f"{cmd} · pipeline {pipe}" + (f"\n{rotulo_carga(taxa)}" if taxa else ""), fontsize=10)
+            ax.set_xlabel("quantil teórico (normal)", fontsize=9)
+            ax.grid(alpha=0.3)
+        np.atleast_1d(eixos)[0].set_ylabel("quantil observado (padronizado)")
+        np.atleast_1d(eixos)[0].legend(fontsize=8)
+        fig.suptitle(f"{mid} · Q-Q plot de {nome} por grupo", fontsize=11)
+        fig.tight_layout()
+        arq = saida / f"qq_{m}.png"
         fig.savefig(arq, dpi=130)
         plt.close(fig)
         arquivos.append(arq)
@@ -262,13 +322,20 @@ def tabela_md(desc: pd.DataFrame, tst: pd.DataFrame, coleta: str) -> tuple[str, 
                  f"{fmt(r.media)} | {fmt(r.mediana)} | {fmt(r.dp)} | {fmt(r.cv_pct)} | {fmt(r['min'])} | "
                  f"{fmt(r['max'])} | {fmt(r.iqr)} | [{fmt(r.ic95_mediana_inf)}; {fmt(r.ic95_mediana_sup)}] |")
     t = ["# Testes Redis × Valkey: coleta `" + coleta + "`", "",
-         "Diferença = (mediana Valkey − mediana Redis) / mediana Redis. Efeito positivo: Valkey maior.", "",
-         "| Métrica | Comando | Pipeline | Carga | Med. Redis | Med. Valkey | Dif. (%) | Teste | p | p Holm | Efeito | Magnitude |",
-         "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+         "Diferença = (mediana Valkey − mediana Redis) / mediana Redis. Efeito positivo: Valkey maior. "
+         "IC 95% da diferença por *bootstrap* (10.000 reamostragens). p Holm sobre os "
+         f"{len(tst)} testes da família.", "",
+         f"Leitura prática (limiar de {fmt(LIMIAR_RELEVANCIA, 0)}%): **relevante** = IC inteiro além de "
+         f"±{fmt(LIMIAR_RELEVANCIA, 0)}%; **irrelevante** = IC inteiro dentro de ±{fmt(LIMIAR_RELEVANCIA, 0)}%; "
+         "**inconclusivo** = IC cruza o limiar.", "",
+         "| Métrica | Comando | Pipeline | Carga | Med. Redis | Med. Valkey | Dif. (%) | IC 95% dif. (%) | Teste | p "
+         "| p Holm | Efeito | Magnitude | Leitura prática |",
+         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for _, r in (tst.sort_values(["metrica", *CONDICAO]) if not tst.empty else tst).iterrows():
         t.append(f"| {r.metrica} {r.nome} | {r.comando} | {r.pipeline} | {rotulo_carga(r.taxa)} | "
-                 f"{fmt(r.mediana_redis)} | {fmt(r.mediana_valkey)} | {fmt(r.dif_mediana_pct, 1)} | {r.teste} | {fmt(r.p, 4)} | "
-                 f"{fmt(r.p_holm, 4)} | {r.tamanho_efeito} = {fmt(r.efeito)} | {r.magnitude} |")
+                 f"{fmt(r.mediana_redis)} | {fmt(r.mediana_valkey)} | {fmt(r.dif_mediana_pct, 1)} | "
+                 f"[{fmt(r.ic95_dif_inf_pct, 1)}; {fmt(r.ic95_dif_sup_pct, 1)}] | {r.teste} | {fmt(r.p, 4)} | "
+                 f"{fmt(r.p_holm, 4)} | {r.tamanho_efeito} = {fmt(r.efeito)} | {r.magnitude} | {r.leitura_pratica} |")
     return "\n".join(d) + "\n", "\n".join(t) + "\n"
 
 

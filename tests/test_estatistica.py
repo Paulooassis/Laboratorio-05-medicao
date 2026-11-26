@@ -113,6 +113,39 @@ def test_ic_mediana_contem_a_mediana_e_e_reprodutivel():
     assert (lo, hi) == analise.ic_mediana(x, np.random.default_rng(0), b=2000)
 
 
+# --- IC da diferenca e leitura pratica --------------------------------------------
+
+
+def test_ic_dif_mediana_contem_a_diferenca_e_e_reprodutivel():
+    rng = np.random.default_rng(11)
+    r, v = rng.lognormal(0, 0.03, 50), rng.lognormal(np.log(0.8), 0.03, 50)
+    lo, hi = analise.ic_dif_mediana_pct(v, r, np.random.default_rng(0), b=2000)
+    dif = 100 * (np.median(v) - np.median(r)) / np.median(r)
+    assert lo <= dif <= hi
+    assert -23 < lo < hi < -17  # efeito verdadeiro de -20%, ruido de 3%
+    assert (lo, hi) == analise.ic_dif_mediana_pct(v, r, np.random.default_rng(0), b=2000)
+
+
+def test_ic_dif_mediana_cobre_o_zero_sem_efeito():
+    """Sem efeito, o IC 95% deve conter 0 em ~95% das amostras."""
+    rng = np.random.default_rng(12)
+    cobre = 0
+    for _ in range(200):
+        r, v = rng.lognormal(0, 0.05, 30), rng.lognormal(0, 0.05, 30)
+        lo, hi = analise.ic_dif_mediana_pct(v, r, rng, b=1000)
+        cobre += lo <= 0 <= hi
+    assert 0.88 <= cobre / 200 <= 1.0
+
+
+@pytest.mark.parametrize("ic, leitura", [
+    ((-24.0, -18.0), "relevante"), ((5.0, 9.0), "relevante"), ((6.0, 7.0), "relevante"),
+    ((-2.0, 3.0), "irrelevante"), ((-4.9, 4.9), "irrelevante"),
+    ((-7.0, -2.0), "inconclusivo"), ((-6.0, 6.0), "inconclusivo"), ((4.0, 8.0), "inconclusivo"),
+])
+def test_leitura_pratica(ic, leitura):
+    assert analise.leitura_pratica(*ic) == leitura
+
+
 def dados_sinteticos(n=6, efeito_mem=-0.2, semente=0) -> pd.DataFrame:
     """Execucoes validas nos 8 tratamentos; o Valkey usa 20% menos memoria, o resto e igual."""
     rng = np.random.default_rng(semente)
@@ -147,6 +180,10 @@ def test_testes_detecta_so_a_memoria():
     assert mem["significativo_holm"].all()
     assert np.allclose(mem["dif_mediana_pct"], -20, atol=0.5)
     assert not tst.loc[tst["metrica"] != "M4", "relevante_5pct"].any()
+    assert (mem["leitura_pratica"] == "relevante").all()
+    assert (mem["ic95_dif_inf_pct"] <= mem["dif_mediana_pct"]).all()
+    assert (mem["dif_mediana_pct"] <= mem["ic95_dif_sup_pct"]).all()
+    assert (tst.loc[tst["metrica"] != "M4", "leitura_pratica"] == "irrelevante").all()
 
 
 def com_carga_fixa(df: pd.DataFrame, n: int, semente: int = 1) -> pd.DataFrame:
@@ -186,6 +223,7 @@ def test_graficos_geram_boxplot_ecdf_e_interacao(tmp_path):
     nomes = {a.name for a in arquivos}
     assert {f"boxplot_{m}.png" for m in analise.METRICAS} <= nomes
     assert {"ecdf_lat_p50_ms.png", "ecdf_lat_p99_ms.png", "interacao_vazao.png"} <= nomes
+    assert {f"qq_{m}.png" for m in analise.METRICAS} <= nomes
     assert all(a.stat().st_size > 0 for a in arquivos)
 
 
